@@ -2302,7 +2302,8 @@ ct_zones_runtime_data_handler(struct engine_node *node, void *data)
     scan_start = min_ct_zone;
 
     HMAP_FOR_EACH (tdp, node, tracked_dp_bindings) {
-        if (tdp->tracked_type == TRACKED_RESOURCE_NEW) {
+        if (tdp->tracked_type == TRACKED_RESOURCE_NEW ||
+            tdp->tracked_type == TRACKED_RESOURCE_REMOVED) {
             /* A new datapath has been added. Fall back to full recompute. */
             return false;
         }
