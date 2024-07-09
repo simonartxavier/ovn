@@ -526,6 +526,11 @@ if_status_mgr_update(struct if_status_mgr *mgr,
             if (!port_binding_pb_chassis_is_set(chassis_rec, pb_table,
                                                 &iface->pb_uuid)) {
                 if (!sb_readonly) {
+                    long long int now = time_msec();
+                    if (lport_maybe_postpone(iface->id, now,
+                                             get_postponed_ports())) {
+                        continue;
+                    }
                     port_binding_set_pb(chassis_rec, pb_table, iface->id,
                                         &iface->pb_uuid, iface->bind_type);
                 } else {
