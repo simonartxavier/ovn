@@ -19,6 +19,7 @@
 #include "binding.h"
 #include "chassis.h"
 #include "ct-zone.h"
+#include "lport.h"
 #include "local_data.h"
 #include "openvswitch/vlog.h"
 
@@ -169,7 +170,8 @@ out:
 void
 ct_zones_update(const struct sset *local_lports,
                 const struct ovsrec_open_vswitch_table *ovs_table,
-                const struct hmap *local_datapaths, struct ct_zone_ctx *ctx)
+                const struct hmap *local_datapaths, struct ct_zone_ctx *ctx,
+                struct ovsdb_idl_index *sbrec_port_binding_by_name)
 {
     int min_ct_zone, max_ct_zone;
     const char *user;
@@ -179,8 +181,13 @@ ct_zones_update(const struct sset *local_lports,
     struct simap unreq_snat_zones = SIMAP_INITIALIZER(&unreq_snat_zones);
 
     const char *local_lport;
+    const struct sbrec_port_binding *pb;
     SSET_FOR_EACH (local_lport, local_lports) {
-        sset_add(&all_users, local_lport);
+        pb = lport_lookup_by_name(sbrec_port_binding_by_name,
+                                  local_lport);
+        if (!pb || strcmp(pb->type, "virtual")) {
+            sset_add(&all_users, local_lport);
+        }
     }
 
     /* Local patched datapath (gateway routers) need zones assigned. */
