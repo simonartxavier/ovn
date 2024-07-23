@@ -1227,6 +1227,11 @@ add_network_to_routes_ad(struct hmap *routes_ad, const char *network,
         return;
     }
 
+    if (in6_is_lla(&nexthop)) {
+        VLOG_DBG("Route ad: skip lla nexthop of lrp %s.", nb_lrp->name);
+        return;
+    }
+
     if (VLOG_IS_DBG_ENABLED()) {
         struct ds msg = DS_EMPTY_INITIALIZER;
 
