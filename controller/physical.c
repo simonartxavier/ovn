@@ -699,7 +699,7 @@ put_replace_chassis_mac_flows(const struct shash *ct_zones,
         put_resubmit(OFTABLE_LOG_INGRESS_PIPELINE, ofpacts_p);
         ofctrl_add_flow(flow_table, OFTABLE_PHY_TO_LOG, 180,
                         rport_binding->header_.uuid.parts[0],
-                        &match, ofpacts_p, hc_uuid);
+                        &match, ofpacts_p, &localnet_port->header_.uuid);
 
         /* Provide second search criteria, i.e localnet port's
          * vlan ID for conjunction flow */
@@ -719,7 +719,7 @@ put_replace_chassis_mac_flows(const struct shash *ct_zones,
         conj->clause = 1;
         ofctrl_add_flow(flow_table, OFTABLE_PHY_TO_LOG, 180,
                         rport_binding->header_.uuid.parts[0],
-                        &match, ofpacts_p, hc_uuid);
+                        &match, ofpacts_p, &localnet_port->header_.uuid);
     }
 }
 
