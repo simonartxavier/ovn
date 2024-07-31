@@ -98,6 +98,7 @@ m4_define([CHECK_RELATED_PORTS_AFTER_RECOMPUTE], [
 # CHECK_AFTER_RECOMPUTE(hv, sbox, related_ports, metadata)
 # Check related ports (ignoring $related_ports) and FLOWS (ignoring flows from $metadata)
 # by comparing IP flows and flows after recompute.
+# # We also ignore Flows from tables OFTABLE_MAC_BINDING, OFTABLE_MAC_LOOKUP, OFTABLE_MAC_CACHE_USE
 m4_define([CHECK_AFTER_RECOMPUTE], [
     hv=$1
     sbox=$2
@@ -151,6 +152,7 @@ m4_define([CHECK_AFTER_RECOMPUTE], [
           fi
         fi
       done
+      cat flow-diff-$hv | grep -v OFTABLE_MAC_BINDING | grep -v OFTABLE_MAC_LOOKUP | grep -v OFTABLE_MAC_CACHE_USE > flow-diff-$hv
       AT_CHECK([wc -l < flow-diff-$hv], [0], [0
 ])
     fi
@@ -166,8 +168,9 @@ m4_define([OVN_CLEANUP_CONTROLLER],[
     hv=$1
     sbox=$2
     related_ports=$3
+    ignored_dp=$4
 
-    CHECK_RELATED_PORTS_AFTER_RECOMPUTE([$hv], [$sbox], [$related_ports])
+    CHECK_AFTER_RECOMPUTE([$hv], [$sbox], [$related_ports], [$ignored_dp])
     if test "$hv" = "vtep"; then
         OVS_APP_EXIT_AND_WAIT([ovn-controller-vtep])
         OVS_APP_EXIT_AND_WAIT([ovs-vtep])
@@ -186,8 +189,9 @@ m4_define([OVN_CLEANUP_SBOX],[
     sbox=$1
     error=$2
     related_ports=$3
+    ignored_dp=$4
     echo "$sbox: clean up sandbox"
-    OVN_CLEANUP_CONTROLLER([$sbox], [$sbox], [$related_ports])
+    OVN_CLEANUP_CONTROLLER([$sbox], [$sbox], [$related_ports], [$ignored_dp])
     OVN_CLEANUP_VSWITCH([$sbox])
 
     # Check for errors in logs. Ignore following errors:
@@ -215,8 +219,9 @@ m4_define([OVN_CLEANUP],[
     m4_foreach([sbox_and_error], [$@], [
         sbox=$(echo "sbox_and_error" |sed -n '1p')
         error=$(echo "sbox_and_error"  | grep '/')
-        related_ports=$(echo "sbox_and_error" | sed -n '2,$p' | grep -v '/')
-        OVN_CLEANUP_SBOX([$sbox], [$error], [$related_ports])
+        ignored_dp=$(echo "sbox_and_error"  | grep 'ignored_dp' |  cut -d'=' -f 2)
+        related_ports=$(echo "sbox_and_error" | sed -n '2,$p' | grep -v '/' | grep -v 'ignored_dp')
+        OVN_CLEANUP_SBOX([$sbox], [$error], [$related_ports], [$ignored_dp])
     ])
 
     echo

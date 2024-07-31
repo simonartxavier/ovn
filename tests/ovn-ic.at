@@ -404,7 +404,8 @@ switch <0> (ts1)
 ovn-nbctl lsp-del lsp-ts1-lr1
 OVS_WAIT_WHILE([ovn_as az2 ovn-nbctl show | grep lsp-ts1-lr1])
 
-OVN_CLEANUP_SBOX(gw1)
+# ts1 should not be local dataath since lsp-ts1-lr1 has been deleted.
+OVN_CLEANUP_SBOX(gw1, [], [], [ts1,lr1])
 OVN_CLEANUP_IC([az1], [az2])
 
 AT_CLEANUP
@@ -1611,7 +1612,8 @@ done
 OVS_WAIT_UNTIL([check_packets], [$at_diff -F'^---' expected received])
 
 for az in `seq 1 $n_az`; do
-    OVN_CLEANUP_SBOX([hv$az])
+    ovn_as az$az
+    OVN_CLEANUP_SBOX([hv$az], [], [], [ts3])
     OVN_CLEANUP_SBOX([gw$az])
     OVN_CLEANUP_AZ([az$az])
 done

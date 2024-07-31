@@ -8491,7 +8491,9 @@ OVS_WAIT_UNTIL([test x`ovn-nbctl lsp-get-up lp1` = xup])
 as hv1 ovs-vsctl del-port br-int vif1
 OVS_WAIT_UNTIL([test x`ovn-nbctl lsp-get-up lp1` = xdown])
 
-OVN_CLEANUP([hv1])
+# ls1 not local to hv1 anymore after  ovs-vsctl del-port br-int vif1
+OVN_CLEANUP([hv1
+ignored_dp=ls1])
 
 AT_CLEANUP
 ])
@@ -10827,7 +10829,9 @@ OVS_WAIT_UNTIL([test xdown = x$(ovn-nbctl lsp-get-up vm1)])
 OVS_WAIT_UNTIL([test xdown = x$(ovn-nbctl lsp-get-up foo1)])
 OVS_WAIT_UNTIL([test xdown = x$(ovn-nbctl lsp-get-up bar1)])
 
-OVN_CLEANUP([hv1],[hv2])
+# mgmt2 not local to hv1 anymore after ovs-vsctl del-port vm1
+OVN_CLEANUP([hv1
+ignored_dp=mgmt2],[hv2])
 
 AT_CLEANUP
 ])
@@ -12488,7 +12492,8 @@ net_add n1
 sim_add hv1
 as hv1
 ovs-vsctl add-br br-phys
-ovn_attach n1 br-phys 192.168.0.1
+# do not use same ip for underlay and underlay networks
+ovn_attach n1 br-phys 192.168.1.1
 
 AT_CHECK([ovs-vsctl set Open_vSwitch . external-ids:ovn-bridge-mappings=physnet1:br-phys])
 AT_CHECK([ovs-vsctl add-port br-phys snoopvif -- set Interface snoopvif options:tx_pcap=hv1/snoopvif-tx.pcap options:rxq_pcap=hv1/snoopvif-rx.pcap])
@@ -12496,13 +12501,13 @@ AT_CHECK([ovs-vsctl add-port br-phys snoopvif -- set Interface snoopvif options:
 sim_add hv2
 as hv2
 ovs-vsctl add-br br-phys
-ovn_attach n1 br-phys 192.168.0.2
+ovn_attach n1 br-phys 192.168.1.2
 # Initially test with no bridge-mapping on hv2, expect to receive no packets
 
 sim_add hv3
 as hv3
 ovs-vsctl add-br br-phys
-ovn_attach n1 br-phys 192.168.0.3
+ovn_attach n1 br-phys 192.168.1.3
 # Initially test with no bridge-mapping on hv3
 
 # Create a localnet port.
@@ -14973,7 +14978,9 @@ wait_column "$hv1_uuid" Port_Binding requested_chassis logical_port=lsp0
 wait_column "$hv2_uuid" Port_Binding additional_chassis logical_port=lsp0
 wait_column "$hv2_uuid $hv3_uuid" Port_Binding requested_additional_chassis logical_port=lsp0
 
-OVN_CLEANUP([hv1],[hv2],[hv3])
+# ls0 not local to hv1 since as hv1 check ovs-vsctl -- del-port br-int lsp0
+OVN_CLEANUP([hv1
+ignored_dp=ls0],[hv2],[hv3])
 
 AT_CLEANUP
 ])
@@ -15314,6 +15321,16 @@ echo $request >> hv3/third.expected
 
 check_packets
 
+# ct_zone allocation differs between I+P and recompute:
+# - In I+P an ovs interface with external-ids:iface-id set (but no
+#   logical_port in sb) results in no ct_zone allocated.
+# - In recompute, in the same case, a ct_zone is allocated - this is
+#   necessary to avoid flushing ct_zone if/when controller is restarted.
+# As migrrator has iface-id set on hv1 but is bound to hv2, we would hit
+# some ct-zone related differences in flows before and after recompute.
+# Avoid/hide this by removing iface-id on hv1.
+
+as hv1 check ovs-vsctl remove Interface migrator external-ids iface-id
 OVN_CLEANUP([hv1],[hv2],[hv3])
 
 AT_CLEANUP
@@ -15710,6 +15727,11 @@ echo $request >> hv2/n1.expected
 
 check_packets
 
+# ct_zone allocation differs between I+P and recompute.
+# As migrrator has iface-id set on hv1 but is bound to hv2, we would hit
+# some ct-zone related differences in flows before and after recompute.
+# Avoid/hide this by removing iface-id on hv1.
+as hv1 check ovs-vsctl remove Interface migrator external-ids iface-id
 OVN_CLEANUP([hv1],[hv2],[hv3])
 
 AT_CLEANUP
@@ -16231,6 +16253,12 @@ check_packets
 check ovn-nbctl lsp-set-options migrator requested-chassis=hv2
 OVS_WAIT_UNTIL([test x = x$(ovn-sbctl get Port_Binding $pb_uuid options:additional-chassis-activated)])
 
+# ct_zone allocation differs between I+P and recompute.
+# As migrrator has iface-id set on hv1 but is bound to hv2, we would hit
+# some ct-zone related differences in flows before and after recompute.
+# Avoid/hide this by removing iface-id on hv1.
+as hv1 check ovs-vsctl remove Interface migrator external-ids iface-id
+
 OVN_CLEANUP([hv1],[hv2],[hv3])
 
 AT_CLEANUP
@@ -16486,7 +16514,9 @@ AT_CHECK([as hv2 ovs-ofctl dump-flows br-int table=OFTABLE_LOG_TO_PHY | grep act
 AT_CHECK([as hv1 ovs-ofctl dump-flows br-int table=OFTABLE_PHY_TO_LOG | grep in_port=$hv1_ofport], [1], [])
 AT_CHECK([as hv1 ovs-ofctl dump-flows br-int table=OFTABLE_LOG_TO_PHY | grep output], [1], [])
 
-OVN_CLEANUP([hv1],[hv2])
+# ls0 should nt be local to hv1 anymore since ovn-nbctl lsp-set-options lsp0 requested-chassis=hv2
+OVN_CLEANUP([hv1
+ignored_dp=ls0],[hv2])
 
 AT_CLEANUP
 ])
@@ -16579,7 +16609,9 @@ wait_column '' Port_Binding chasssi logical_port=lsp0
 AT_CHECK([as hv1 ovs-ofctl dump-flows br-int table=OFTABLE_PHY_TO_LOG | grep in_port=1], [1], [])
 AT_CHECK([as hv1 ovs-ofctl dump-flows br-int table=OFTABLE_LOG_TO_PHY | grep output], [1], [])
 
-OVN_CLEANUP([hv1])
+# ls0 not local to hv1 since ovn-nbctl --wait=hv lsp-set-options lsp0 requested-chassis=non-existant-chassis
+OVN_CLEANUP([hv1
+ignored_dp=ls0])
 
 AT_CLEANUP
 ])
@@ -16843,6 +16875,7 @@ OVN_CHECK_PACKETS_CONTAIN([hv2/br-phys_n1-tx.pcap], [hv2/n1.expected])
 # So public should not be a related_port.
 OVN_CLEANUP([hv1
 public
+ignored_dp=ls0
 ],[hv2])
 
 AT_CLEANUP
@@ -19822,6 +19855,13 @@ OVN_CHECK_PACKETS([hv2/vif1-tx.pcap], [expected])
 
 # Start ovn-controller again just so OVN_CLEANUP doesn't complain
 as hv2 start_daemon ovn-controller
+
+# Stopping and restarting ovn-controller on hv2 might cause geneve to be recreated, and ofport change.
+# Make sure the ofport change does not happen right before recompute, cauing potential flow differences
+# between IP and recompute flows.
+OVS_WAIT_UNTIL([
+    test 1 = $(as hv1 ovs-vsctl --columns ofport --bare find Interface name=ovn-hv2-0 | wc -l)
+])
 
 OVN_CLEANUP([hv1],[hv2])
 AT_CLEANUP
@@ -24445,10 +24485,12 @@ m4_define([DVR_N_S_ARP_HANDLING],
    as hv4 ovs-appctl fdb/show br-phys
 
    # Expect some potential transaction errors for MAC_Binding
-   # Since router-to-underlay moved to hv3, ls-underlay is not local to hv1 anymore and ln3 should not be a related_port.
+   Since router-to-underlay moved to hv3, ls-underlay is not local to hv1 anymore
+   As ls-underlay is not local, ln3 should not be a related_port.
    OVN_CLEANUP([hv1
    /transaction error/d
-ln3],[hv2
+ln3
+ignored_dp=ls-underlay],[hv2
    /transaction error/d
    ],[hv3
    /transaction error/d
@@ -25434,6 +25476,12 @@ as hv4 ovs-ofctl dump-flows br-int
 as hv4 ovs-ofctl show br-phys
 as hv4 ovs-appctl fdb/show br-phys
 
+# Wait till the mac_binding flows appear in hv1 to avoid flow differences in tables OFTABLE_MAC_BINDING, OFTABLE_MAC_LOOKUP, OFTABLE_MAC_CACHE_USE.
+OVS_WAIT_UNTIL([test 1 = $(as hv1 ovs-ofctl dump-flows br-int table=OFTABLE_MAC_BINDING \
+| grep -c  reg0=0xc0a80101)])
+OVS_WAIT_UNTIL([test 1 = $(as hv1 ovs-ofctl dump-flows br-int table=OFTABLE_MAC_BINDING \
+| grep -c  reg0=0xc0a80202)])
+
 # Expect some potential transaction errors for MAC_Binding
 OVN_CLEANUP([hv1
 /transaction error/d
@@ -25712,13 +25760,13 @@ check ovn-nbctl lsp-set-type sw0-lr0 router
 check ovn-nbctl lsp-set-addresses sw0-lr0 router
 check ovn-nbctl lsp-set-options sw0-lr0 router-port=lr0-sw0
 
-check ovn-nbctl lrp-add lr0 lr0-sw1 00:00:00:00:ff:02 2001::a/64
+check ovn-nbctl lrp-add lr0 lr0-sw1 00:00:00:00:ff:02 2002::a/64
 check ovn-nbctl lsp-add sw1 sw1-lr0
 check ovn-nbctl lsp-set-type sw1-lr0 router
 check ovn-nbctl lsp-set-addresses sw1-lr0 router
 check ovn-nbctl lsp-set-options sw1-lr0 router-port=lr0-sw1
 
-check ovn-nbctl lb-add lb1 [[2001::a]]:80 [[2001::3]]:80,[[2002::3]]:80
+check ovn-nbctl lb-add lb1 [[2002::a]]:80 [[2001::3]]:80,[[2002::3]]:80
 OVN_LB_ID=$(ovn-nbctl --bare --column _uuid find load_balancer name=lb1)
 check ovn-nbctl set load_balancer ${OVN_LB_ID} selection_fields="ip_dst,ip_src,tp_dst,tp_src"
 #
@@ -25726,7 +25774,7 @@ check ovn-nbctl --wait=sb set load_balancer . ip_port_mappings:\"[[2001::3]]\"=\
 check ovn-nbctl --wait=sb set load_balancer . ip_port_mappings:\"[[2002::3]]\"=\"sw1-p1:[[2002::2]]\"
 
 AT_CHECK([ovn-nbctl --wait=sb \
-          -- --id=@hc create Load_Balancer_Health_Check vip="\[\[2001\:\:a\]\]\:80" \
+          -- --id=@hc create Load_Balancer_Health_Check vip="\[\[2002\:\:a\]\]\:80" \
              options:failure_count=100 \
           -- add Load_Balancer . health_check @hc | uuidfilt], [0], [<0>
 ])
@@ -25762,15 +25810,15 @@ OVS_WAIT_FOR_OUTPUT(
   [ovn-sbctl dump-flows > sbflows
    ovn-sbctl dump-flows sw0 | grep ct_lb_mark | grep priority=120 | sed 's/table=..//'], 0,
   [dnl
-  (ls_in_pre_stateful ), priority=120  , match=(reg0[[2]] == 1 && ip6.dst == 2001::a && tcp.dst == 80), action=(xxreg1 = 2001::a; reg2[[0..15]] = 80; ct_lb_mark;)
-  (ls_in_lb           ), priority=120  , match=(ct.new && ip6.dst == 2001::a && tcp.dst == 80), action=(ct_lb_mark(backends=[[2001::3]]:80,[[2002::3]]:80; hash_fields="ip_dst,ip_src,tcp_dst,tcp_src");)
+  (ls_in_pre_stateful ), priority=120  , match=(reg0[[2]] == 1 && ip6.dst == 2002::a && tcp.dst == 80), action=(xxreg1 = 2002::a; reg2[[0..15]] = 80; ct_lb_mark;)
+  (ls_in_lb           ), priority=120  , match=(ct.new && ip6.dst == 2002::a && tcp.dst == 80), action=(ct_lb_mark(backends=[[2001::3]]:80,[[2002::3]]:80; hash_fields="ip_dst,ip_src,tcp_dst,tcp_src");)
 ])
 
 AT_CAPTURE_FILE([sbflows2])
 OVS_WAIT_FOR_OUTPUT(
   [ovn-sbctl dump-flows > sbflows2
    ovn-sbctl dump-flows lr0 | grep ct_lb_mark | grep priority=120 | sed 's/table=..//'], 0,
-  [  (lr_in_dnat         ), priority=120  , match=(ct.new && !ct.rel && ip6 && ip6.dst == 2001::a && tcp && tcp.dst == 80 && is_chassis_resident("cr-lr0-public")), action=(ct_lb_mark(backends=[[2001::3]]:80,[[2002::3]]:80; hash_fields="ip_dst,ip_src,tcp_dst,tcp_src");)
+  [  (lr_in_dnat         ), priority=120  , match=(ct.new && !ct.rel && ip6 && ip6.dst == 2002::a && tcp && tcp.dst == 80 && is_chassis_resident("cr-lr0-public")), action=(ct_lb_mark(backends=[[2001::3]]:80,[[2002::3]]:80; hash_fields="ip_dst,ip_src,tcp_dst,tcp_src");)
 ])
 
 # get the svc monitor mac.
@@ -25787,7 +25835,7 @@ OVS_WAIT_UNTIL(
 grep "405400000003${svc_mon_src_mac}" | wc -l`]
 )
 
-check ovn-nbctl set load_balancer_health_check [[2001::a]]:80 options:failure_count=1
+check ovn-nbctl set load_balancer_health_check [[2002::a]]:80 options:failure_count=1
 wait_row_count Service_Monitor 2 status=offline
 
 OVS_WAIT_UNTIL(
@@ -25803,16 +25851,16 @@ grep "405400000003${svc_mon_src_mac}" | wc -l`]
 AT_CAPTURE_FILE([sbflows3])
 ovn-sbctl dump-flows sw0 > sbflows3
 AT_CHECK(
-  [grep "ip6.dst == 2001::a && tcp.dst == 80" sbflows3 | grep priority=120 |\
+  [grep "ip6.dst == 2002::a && tcp.dst == 80" sbflows3 | grep priority=120 |\
    ovn_strip_lflows], [0], [dnl
-  table=??(ls_in_lb           ), priority=120  , match=(ct.new && ip6.dst == 2001::a && tcp.dst == 80), action=(drop;)
-  table=??(ls_in_pre_stateful ), priority=120  , match=(reg0[[2]] == 1 && ip6.dst == 2001::a && tcp.dst == 80), action=(xxreg1 = 2001::a; reg2[[0..15]] = 80; ct_lb_mark;)
+  table=??(ls_in_lb           ), priority=120  , match=(ct.new && ip6.dst == 2002::a && tcp.dst == 80), action=(drop;)
+  table=??(ls_in_pre_stateful ), priority=120  , match=(reg0[[2]] == 1 && ip6.dst == 2002::a && tcp.dst == 80), action=(xxreg1 = 2002::a; reg2[[0..15]] = 80; ct_lb_mark;)
 ])
 
 AT_CAPTURE_FILE([sbflows4])
 ovn-sbctl dump-flows lr0 > sbflows4
 AT_CHECK([grep lr_in_dnat sbflows4 | grep priority=120 | sed 's/table=..//' | sort], [0], [dnl
-  (lr_in_dnat         ), priority=120  , match=(ct.new && !ct.rel && ip6 && ip6.dst == 2001::a && tcp && tcp.dst == 80 && is_chassis_resident("cr-lr0-public")), action=(drop;)
+  (lr_in_dnat         ), priority=120  , match=(ct.new && !ct.rel && ip6 && ip6.dst == 2002::a && tcp && tcp.dst == 80 && is_chassis_resident("cr-lr0-public")), action=(drop;)
 ])
 
 # Delete sw0-p1
@@ -28599,7 +28647,9 @@ reg15=0x${p1_dpkey} | grep REG13 | wc -l) -eq 0])
 p1_zoneid=$(as hv1 ovs-vsctl get bridge br-int external_ids:ct-zone-sw0-p1 | sed 's/"//g')
 AT_CHECK([test -z $p1_zoneid])
 
-OVN_CLEANUP([hv1])
+# sw0 is not local to hv1 since ovn-nbctl lsp-del sw0-p1
+OVN_CLEANUP([hv1
+ignored_dp=sw0])
 AT_CLEANUP
 ])
 
@@ -28645,8 +28695,13 @@ check ovn-nbctl lrp-add DR dr-ls1 00:00:01:01:02:03 10.0.0.1/24
 check ovn-nbctl lsp-add ls1 ls1-dr -- set Logical_Switch_Port ls1-dr \
     type=router options:router-port=dr-ls1 addresses='"00:00:01:01:02:03"'
 
+# Ports on DR should be in different subnets to prevent having flows with same match but different actions.
+# The following flows (in lr_in_ip_routing) would fight in case the same subnet is used:
+# table=IP_ROUTING, priority=74,ip,metadata=0x1,nw_dst=10.0.0.0/24 actions=dec_ttl(),load:0->OXM_OF_PKT_REG4[32..47],move:NXM_OF_IP_DST[]->NXM_NX_XXREG0[96..127],load:0xa000002->NXM_NX_XXREG0[64..95],mod_dl_src:00:00:01:01:02:04,load:0x2
+# table=IP_ROUTING, priority=74,ip,metadata=0x1,nw_dst=10.0.0.0/24 actions=dec_ttl(),load:0->OXM_OF_PKT_REG4[32..47],move:NXM_OF_IP_DST[]->NXM_NX_XXREG0[96..127],load:0xa000002->NXM_NX_XXREG0[64..95],mod_dl_src:00:00:01:01:02:03,load:0x1
+
 # Connect ls2 to DR
-check ovn-nbctl lrp-add DR dr-ls2 00:00:01:01:02:04 10.0.0.2/24
+check ovn-nbctl lrp-add DR dr-ls2 00:00:01:01:02:04 10.0.1.1/24
 check ovn-nbctl lsp-add ls2 ls2-dr -- set Logical_Switch_Port ls2-dr \
     type=router options:router-port=dr-ls2 addresses='"00:00:01:01:02:04"'
 
@@ -28669,8 +28724,8 @@ check ovn-nbctl lr-route-add GW 10.0.0.0/24 20.0.0.1
 check ovn-nbctl --policy="src-ip" lr-route-add DR 10.0.0.0/24 20.0.0.2
 
 # Now add some ECMP routes to the GW router.
-check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 10.0.0.0/24 172.16.0.2
-check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 10.0.0.0/24 172.16.0.3
+check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 10.0.0.0/16 172.16.0.2
+check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 10.0.0.0/16 172.16.0.3
 
 wait_for_ports_up
 check ovn-nbctl --wait=hv sync
@@ -28771,12 +28826,12 @@ check ovn-nbctl ls-add join
 check ovn-nbctl ls-add ext
 
 # Connect ls1 to DR
-check ovn-nbctl lrp-add DR dr-ls1 00:00:01:01:02:03 1001::1/64
+check ovn-nbctl lrp-add DR dr-ls1 00:00:01:01:02:03 1001:0:0:1::1/64
 check ovn-nbctl lsp-add ls1 ls1-dr -- set Logical_Switch_Port ls1-dr \
     type=router options:router-port=dr-ls1 addresses='"00:00:01:01:02:03"'
 
 # Connect ls2 to DR
-check ovn-nbctl lrp-add DR dr-ls2 00:00:01:01:02:04 1001::2/64
+check ovn-nbctl lrp-add DR dr-ls2 00:00:01:01:02:04 1001:0:0:2::1/64
 check ovn-nbctl lsp-add ls2 ls2-dr -- set Logical_Switch_Port ls2-dr \
     type=router options:router-port=dr-ls2 addresses='"00:00:01:01:02:04"'
 
@@ -28799,8 +28854,8 @@ check ovn-nbctl lr-route-add GW 1001::/64 2001::1
 check ovn-nbctl --policy="src-ip" lr-route-add DR 1001::0/64 2001::2
 
 # Now add some ECMP routes to the GW router.
-check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 1001::/64 7001::2
-check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 1001::/64 7001::3
+check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 1001::/48 7001::2
+check ovn-nbctl --ecmp-symmetric-reply --policy="src-ip" lr-route-add GW 1001::/48 7001::3
 
 wait_for_ports_up
 check ovn-nbctl --wait=hv sync
@@ -29091,7 +29146,9 @@ as hv1 ovn-appctl -t ovn-controller debug/resume
 # Make sure ovn-controller runs fine.
 OVS_WAIT_UNTIL([test x$(as hv1 ovn-appctl -t ovn-controller debug/status) = "xrunning"])
 
-OVN_CLEANUP([hv1])
+# ls is not local to hv1 since ovn-nbctl --wait=sb lsp-del lsp
+OVN_CLEANUP([hv1
+ignored_dp=ls])
 AT_CLEANUP
 ])
 
@@ -29740,9 +29797,26 @@ OVS_WAIT_UNTIL([
 test_arp_response 000030303233 $(ip_to_hex 172 16 0 200) hv1 hv2 hv3
 test_arp_response 000030303233 $(ip_to_hex 172 16 0 201) hv1 hv2 hv3
 
+# In OVN_CLEANUP we recompute to check whether I-P created flows are correct.
+# However, if gw_router is on hv1, then public on hv1 has two peer ports.
+# There is one flow (in table 0, priority 180) replacing chassis mac with router
+# port mac for east west traffic. If there are two peer ports, then recompute is not
+# deterministic as new src mac might be from any of the two router ports.
+# Hence, move gw_router back on hv3 to avoid this issue.
+# Schedule gw_router on hv3.
+ovn-nbctl set logical_router gw_router options:chassis=hv3
+hv3_uuid=$(ovn-sbctl --bare --columns _uuid list chassis hv3)
+
+OVS_WAIT_UNTIL([
+    gw_router_ch=$(ovn-sbctl --bare --columns chassis list port_binding gw_router-public)
+    test "$gw_router_ch" = $hv3_uuid
+])
+
+
 OVN_CLEANUP([hv1
 /parse MAC binding/d
 /unknown logical port/d
+ignored_dp=gw_router
 ],[hv2
 /parse MAC binding/d
 /unknown logical port/d
@@ -30004,7 +30078,9 @@ ovs-vsctl set interface hv1-vif1 external_ids:iface-id=foo
 OVS_WAIT_UNTIL([test 0 = `as hv1 ovs-ofctl dump-flows br-int | \
 grep conjunction | wc -l`])
 
-OVN_CLEANUP([hv1])
+# ls1 is not local to hv1 since ovs-vsctl set interface hv1-vif1 external_ids:iface-id=foo
+OVN_CLEANUP([hv1
+ignored_dp=ls1])
 AT_CLEANUP
 ])
 
@@ -31135,7 +31211,9 @@ wait_column "false" Port_Binding up logical_port=lsp2
 wait_column "false" Port_Binding up logical_port=lsp1
 wait_column "false" nb:Logical_Switch_Port up name=lsp1
 
-OVN_CLEANUP([hv1])
+# ls not local to hv1 since lsp1 and lsp2 w/o iface-id
+OVN_CLEANUP([hv1
+ignored_dp=ls])
 AT_CLEANUP
 ])
 
@@ -31948,7 +32026,9 @@ wait_column "false" nb:Logical_Switch_Port up name=vm1
 wait_column "false" nb:Logical_Switch_Port up name=vm-cont1
 wait_column "false" nb:Logical_Switch_Port up name=vm-cont2
 
-OVN_CLEANUP([hv1])
+# ls is not local to hv1 since vm1 as a child port of some non existent lport
+OVN_CLEANUP([hv1
+ignored_dp=ls])
 AT_CLEANUP
 ])
 
@@ -32046,7 +32126,9 @@ AT_CHECK([kill -0 $(cat hv1/ovn-controller.pid)])
 
 wait_column "false" nb:Logical_Switch_Port up name=vm1
 
-OVN_CLEANUP([hv1])
+# ls not local to hv1 since as hv1 ovs-vsctl set Interface vm1 external_ids:iface-id=foo
+OVN_CLEANUP([hv1
+ignored_dp=ls])
 AT_CLEANUP
 ])
 
@@ -32124,7 +32206,10 @@ check ovn-nbctl --wait=hv sync
 # Make sure that ovn-controller has not asserted.
 AT_CHECK([kill -0 $(cat hv1/ovn-controller.pid)])
 
-OVN_CLEANUP([hv1])
+# ls1 not local since ovn-nbctl lsp-add ls1 lsp1
+OVN_CLEANUP([hv1
+ignored_dp=ls1
+])
 AT_CLEANUP
 ])
 
@@ -32442,7 +32527,9 @@ primary lport : [[sw0p2]]
 ----------------------------------------
 ])
 
-OVN_CLEANUP([hv1], [hv2])
+# sw0 not local to hv1 since sw0p1 as child port of non existent lport - foo and sw0p2 is on hv2
+OVN_CLEANUP([hv1
+ignored_dp=sw0], [hv2])
 AT_CLEANUP
 ])
 
@@ -33338,6 +33425,7 @@ OVN_CLEANUP([hv1
 ln1
 ln2
 ln3
+ignored_dp=S1,S2,S3
 ],[hv2],[hv3],[hv4],[hv5])
 AT_CLEANUP
 ])
@@ -33574,7 +33662,7 @@ ovn-nbctl ls-add sw0
 ovn-nbctl lsp-add sw0 sw0-port1
 ovn-nbctl lsp-set-addresses sw0-port1 "50:54:00:00:00:01 10.0.0.3"
 check ovn-nbctl lsp-add sw0 sw0-port2
-check ovn-nbctl lsp-set-addresses sw0-port2 "50:54:00:00:00:01 10.0.0.4"
+check ovn-nbctl lsp-set-addresses sw0-port2 "50:54:00:00:00:02 10.0.0.4"
 check ovn-nbctl lsp-set-type sw0-port2 localport
 
 ovn-nbctl lr-add lr0
@@ -33877,7 +33965,9 @@ OVS_WAIT_UNTIL([
     grep -q "CMS requested plugging of lport lsp3" hv2/ovn-controller.log
 ])
 
-OVN_CLEANUP([hv1],[hv2
+# lsw0 not local as ports unplugged
+OVN_CLEANUP([hv1
+ignored_dp=lsw0],[hv2
 /CMS requested plugging of lport lsp3/d
 ])
 AT_CLEANUP
@@ -34426,7 +34516,9 @@ check_port_sec_offlows hv2 OFTABLE_CHK_IN_PORT_SEC
 check_port_sec_offlows hv2 OFTABLE_CHK_IN_PORT_SEC_ND
 check_port_sec_offlows hv2 OFTABLE_CHK_OUT_PORT_SEC
 
-OVN_CLEANUP([hv1], [hv2])
+# sw0 not local to hv1 as sw0p2 and hv1-vif0 are deleted
+OVN_CLEANUP([hv1
+ignored_dp=sw0], [hv2])
 AT_CLEANUP
 ])
 
@@ -34907,7 +34999,10 @@ check ovn-nbctl --wait=hv sync
 check ovn-nbctl lsp-del lsp
 check ovn-nbctl lrp-del lrp
 check ovn-nbctl --wait=hv sync
-OVN_CLEANUP([hv1])
+
+# ro0 not local as lrp deleted
+OVN_CLEANUP([hv1
+ignored_dp=ro0])
 AT_CLEANUP
 ])
 
@@ -34992,7 +35087,10 @@ check ovn-nbctl --wait=hv lrp-add ro0 lrp 00:00:00:00:00:01 aef0:0:0:0:0:0:0:1/6
 check ovn-nbctl --wait=hv lsp-del lsp
 check ovn-nbctl lrp-del lrp
 check ovn-nbctl --wait=hv sync
-OVN_CLEANUP([hv1])
+
+# ro0 not local as lrp deleted
+OVN_CLEANUP([hv1
+ignored_dp=ro0])
 AT_CLEANUP
 ])
 
@@ -37117,7 +37215,8 @@ wait_column "" Port_Binding chassis logical_port=lsp2
 # ls1 should not be a local datapath in hv1 as vif1 iface-id has been removed.
 # Hence ln1 should not be a related port.
 OVN_CLEANUP([hv1
-ln1])
+ln1
+ignored_dp=ls1])
 AT_CLEANUP
 ])
 
@@ -38284,7 +38383,9 @@ OVS_WAIT_FOR_OUTPUT([as hv1 ovs-ofctl dump-flows br-int table=0 |grep priority=1
 0
 ])
 
-OVN_CLEANUP([hv1])
+# lsw0 not local as lsp1 requested-chassis to differant chassis
+OVN_CLEANUP([hv1
+ignored_dp=lsw0])
 AT_CLEANUP
 ])
 
