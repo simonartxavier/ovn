@@ -1062,6 +1062,9 @@ check_fake_multinode_setup
 # Delete the multinode NB and OVS resources before starting the test.
 cleanup_multinode_resources
 
+m_as ovn-chassis-1 ovn-appctl vlog/set dbg
+m_as ovn-chassis-1 ovs-appctl vlog/set dbg
+
 check multinode_nbctl ls-add sw0
 check multinode_nbctl lsp-add sw0 sw0-port1
 check multinode_nbctl lsp-set-addresses sw0-port1 "50:54:00:00:00:03 10.0.0.3 1000::3"
@@ -1155,6 +1158,16 @@ run_ns_traffic() {
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
 
+  m_as ovn-chassis-2 cat /var/log/openvswitch/ovs-vswitchd.log
+  m_as ovn-chassis-2 cat /var/log/ovn/ovn-controller.log
+  M_NS_EXEC([ovn-chassis-2], [sw1p1], [ip a])
+  M_NS_EXEC([ovn-chassis-2], [sw1p1], [route -n])
+  echo "========= BEFORE ping ======="
+  m_as ovn-chassis-2 ovs-ofctl dump-flows br-int
+  M_NS_EXEC([ovn-chassis-2], [sw1p1], [ping -c 3 -i 0.3 -w 2 172.20.0.50 ])
+  echo "========= AFTER ping ======="
+  m_as ovn-chassis-2 ovs-ofctl dump-flows br-int
+  echo "========= DONE ======="
   M_NS_CHECK_EXEC([ovn-chassis-2], [sw1p1], [ping -q -c 3 -i 0.3 -w 2 172.20.0.50 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
