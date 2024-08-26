@@ -121,6 +121,9 @@ Options:\n\
     stream_usage("database", true, true, false);
 }
 
+static const char *
+get_lrp_name_by_ts_port_name(struct ic_context *ctx, const char *ts_port_name);
+
 static const struct icsbrec_availability_zone *
 az_run(struct ic_context *ctx)
 {
@@ -710,13 +713,19 @@ create_isb_pb(struct ic_context *ctx,
               const char *ts_name,
               uint32_t pb_tnl_key)
 {
+    if (!get_lrp_name_by_ts_port_name(ctx, sb_pb->logical_port)) {
+        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
+        VLOG_WARN_RL(&rl, "ignoring port %s on ts %s because "
+                     "logical router port is not found in NB.",
+                     sb_pb->logical_port, ts_name);
+        return;
+    }
     const struct icsbrec_port_binding *isb_pb =
         icsbrec_port_binding_insert(ctx->ovnisb_txn);
     icsbrec_port_binding_set_availability_zone(isb_pb, az);
     icsbrec_port_binding_set_transit_switch(isb_pb, ts_name);
     icsbrec_port_binding_set_logical_port(isb_pb, sb_pb->logical_port);
     icsbrec_port_binding_set_tunnel_key(isb_pb, pb_tnl_key);
-
     const char *address = get_lrp_address_for_sb_pb(ctx, sb_pb);
     if (address) {
         icsbrec_port_binding_set_address(isb_pb, address);
