@@ -2342,3 +2342,117 @@ OVN_CLEANUP_SBOX([hv2], ["/IGMP Querier enabled without a valid IPv4/d
 OVN_CLEANUP_IC([az1],[az2])
 AT_CLEANUP
 ])
+
+OVN_FOR_EACH_NORTHD([
+AT_SETUP([interconnection - LLA])
+AT_KEYWORDS([IP])
+
+# Logical network:
+#
+#       AZ1                     |                     AZ2
+#   ---------------------------------------------------------------------
+#    LS1P1  --- LS1 --- LR1 --- TS --- LR2 --- LS2 --- LS2P1
+#   ---------------------------------------------------------------------
+#
+
+ovn_init_ic_db
+ovn_start az1
+ovn_start az2
+
+net_add n1
+
+sim_add hv1
+as hv1
+check ovs-vsctl add-br br-phys
+ovn_az_attach az1 n1 br-phys 192.168.1.1 16
+check ovs-vsctl -- add-port br-int hv1-vif1 \
+    -- set interface hv1-vif1 external-ids:iface-id=ls1p1 \
+       options:tx_pcap=hv1/vif1-tx.pcap \
+       options:rxq_pcap=hv1/vif1-rx.pcap
+check ovs-vsctl set open . external-ids:ovn-is-interconn=true
+
+sim_add hv2
+as hv2
+check ovs-vsctl add-br br-phys
+ovn_az_attach az2 n1 br-phys 192.168.2.1 16
+check ovs-vsctl -- add-port br-int hv2-vif1 \
+    -- set interface hv2-vif1 external-ids:iface-id=ls2p1 \
+       options:tx_pcap=hv2/vif1-tx.pcap \
+       options:rxq_pcap=hv2/vif1-rx.pcap
+check ovs-vsctl set open . external-ids:ovn-is-interconn=true
+
+AT_CHECK([ovn-ic-nbctl --wait=sb create Transit_Switch name=ts1], [0], [ignore])
+check ovn_as az1 ovn-nbctl wait-until logical_switch ts1
+check ovn_as az2 ovn-nbctl wait-until logical_switch ts1
+
+ovn_as az1
+check ovn-nbctl lr-add lr1 \
+    -- lrp-add lr1 lr1-ts1 00:aa:aa:aa:aa:01 169.254.100.1/24 169:254:100::1/64 \
+    -- lrp-add lr1 lr1-ls1 00:00:00:00:01:fe 172.16.1.254/24 172:16:1::254/64\
+    -- lrp-set-gateway-chassis lr1-ts1 hv1
+check ovn-nbctl ls-add ls1 \
+    -- lsp-add ls1 ls1-lr1 \
+    -- lsp-set-addresses ls1-lr1 router \
+    -- lsp-set-type ls1-lr1 router \
+    -- lsp-set-options ls1-lr1 router-port=lr1-ls1 \
+    -- lsp-add ls1 ls1p1
+check ovn-nbctl lsp-add ts1 ts1-lr1 \
+    -- lsp-set-addresses ts1-lr1 router \
+    -- lsp-set-type ts1-lr1 router \
+    -- lsp-set-options ts1-lr1 router-port=lr1-ts1
+wait_for_ports_up
+
+ovn_as az2
+check ovn-nbctl lr-add lr2 \
+    -- lrp-add lr2 lr2-ts1 00:aa:aa:aa:aa:02 169.254.100.2/24 169:254:100::2/64 \
+    -- lrp-add lr2 lr2-ls2 00:00:00:00:02:fe 172.16.2.254/24 172:16:2::254/64 \
+    -- lrp-set-gateway-chassis lr2-ts1 hv2
+check ovn-nbctl ls-add ls2 \
+    -- lsp-add ls2 ls2-lr2 \
+    -- lsp-set-addresses ls2-lr2 router \
+    -- lsp-set-type ls2-lr2 router \
+    -- lsp-set-options ls2-lr2 router-port=lr2-ls2 \
+    -- lsp-add ls2 ls2p1
+check ovn-nbctl lsp-add ts1 ts1-lr2 \
+    -- lsp-set-addresses ts1-lr2 router \
+    -- lsp-set-type ts1-lr2 router \
+    -- lsp-set-options ts1-lr2 router-port=lr2-ts1
+
+wait_for_ports_up
+check ovn-ic-nbctl --wait=sb sync
+
+ovn_as az1
+check ovn-nbctl lrp-set-gateway-chassis lr1-ts1 hv1
+check ovn-nbctl set NB_Global . options:ic-route-adv=true options:ic-route-learn=true
+
+ovn_as az2
+check ovn-nbctl lrp-set-gateway-chassis lr2-ts1 hv2
+check ovn-nbctl set NB_Global . options:ic-route-adv=true options:ic-route-learn=true
+
+check ovn_as az1 ovn-nbctl --wait=hv sync
+check ovn_as az2 ovn-nbctl --wait=hv sync
+
+# Pre-populate the hypervisors' ARP tables so that we don't lose any
+# packets for ARP resolution (native tunneling doesn't queue packets
+# for ARP resolution).
+OVN_POPULATE_ARP
+
+ovn_as az1 check ovn-nbctl remove logical_router_port lr1-ts1 networks "169\:254\:100\:\:1/64"
+
+# ic-sb route should not contain lla next hops.
+# Such routes used to be created and deleted in ic-sb.
+# Do not use OVS_WAIT_WHILE or WAIT_UNTIL as the wrong (lla) route appears and disappears.
+for i in $(seq 1 50); do
+    AT_CHECK([ovn-ic-sbctl list route | grep "fe80:"], [1])
+done
+
+OVN_CLEANUP_SBOX([hv1])
+
+OVN_CLEANUP_SBOX([hv2])
+
+OVN_CLEANUP_IC([az1],[az2])
+AT_CLEANUP
+])
+
+
+
