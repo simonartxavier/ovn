@@ -1174,6 +1174,7 @@ struct ed_type_runtime_data {
     struct shash local_active_ports_ras;
 
     struct sset *postponed_ports;
+    struct ovsdb_idl_index *sbrec_port_binding_by_name;
 };
 
 /* struct ed_type_runtime_data has the below members for tracking the
@@ -1438,6 +1439,7 @@ en_runtime_data_run(struct engine_node *node, void *data)
 
     binding_run(&b_ctx_in, &b_ctx_out);
     rt_data->localnet_learn_fdb = b_ctx_out.localnet_learn_fdb;
+    rt_data->sbrec_port_binding_by_name = b_ctx_in.sbrec_port_binding_by_name;
 
     engine_set_node_state(node, EN_UPDATED);
 }
@@ -2230,7 +2232,8 @@ en_ct_zones_run(struct engine_node *node, void *data)
 
     ct_zones_restore(&ct_zones_data->ctx, ovs_table, dp_table, br_int);
     ct_zones_update(&rt_data->local_lports, ovs_table,
-                    &rt_data->local_datapaths, &ct_zones_data->ctx);
+                    &rt_data->local_datapaths, &ct_zones_data->ctx,
+                    rt_data->sbrec_port_binding_by_name);
     ct_zones_limits_sync(&ct_zones_data->ctx, &rt_data->local_datapaths,
                          &rt_data->lbinding_data.lports);
 

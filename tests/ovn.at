@@ -38951,7 +38951,28 @@ check ovn-nbctl lrp-add r1 r1-ls2 f0:00:00:00:00:02 192.168.3.1/24 \
                 -- lsp-add ls2 ls2-r1 \
                 -- set Logical_Switch_Port ls2-r1 type=router options:router-port=r1-ls2 addresses=router
 
+check ovn-nbctl lsp-add ls1 ls1-vir \
+                -- lsp-set-addresses ls1-vir "50:54:00:00:00:10 192.168.2.2" \
+                -- lsp-set-type ls1-vir virtual \
+                -- set logical_switch_port ls1-vir options:virtual-ip=192.168.2.2 \
+                -- set logical_switch_port ls1-vir options:virtual-parents=lsp1
+
 check ovn-nbctl --wait=hv sync
+
+send_garp() {
+    hv=$1
+    dev=$2
+    eth_src=$3
+    ip=$4
+
+    packet=$(fmt_pkt "Ether(dst='ff:ff:ff:ff:ff:ff', src='${eth_src}')/ \
+                      ARP(op=2, hwsrc='${eth_src}', hwdst='${eth_src}', \
+                      psrc='${ip}', pdst='${ip}')")
+    as $hv ovs-appctl netdev-dummy/receive $dev $packet
+}
+
+# Sending garp to claim virtual port.
+send_garp hv1 vif1 "50:54:00:00:00:03" 192.168.2.2
 
 AS_BOX([With patch ports])
 zone_list_hv1=$(as hv1 ovn-appctl -t ovn-controller ct-zone-list | sort)
@@ -39062,7 +39083,10 @@ zone_list_hv2_after_recompute=$(as hv2 ovn-appctl -t ovn-controller ct-zone-list
 AT_CHECK([test "X$zone_list_hv1" = "X$zone_list_hv1_after_recompute"])
 AT_CHECK([test "X$zone_list_hv2" = "X$zone_list_hv2_after_recompute"])
 
-OVN_CLEANUP([hv1],[hv2])
+
+OVN_CLEANUP([hv1
+/parse MAC binding/d
+],[hv2])
 
 AT_CLEANUP
 ])
