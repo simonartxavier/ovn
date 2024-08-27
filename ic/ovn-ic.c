@@ -137,19 +137,21 @@ az_run(struct ic_context *ctx)
      * "ovn-ic-sbctl destroy avail <az>". */
     static char *az_name;
     const struct icsbrec_availability_zone *az;
-    if (az_name && strcmp(az_name, nb_global->name)) {
-        ICSBREC_AVAILABILITY_ZONE_FOR_EACH (az, ctx->ovnisb_idl) {
-            /* AZ name update locally need to update az in ISB. */
-            if (nb_global->name[0] && !strcmp(az->name, az_name)) {
-                icsbrec_availability_zone_set_name(az, nb_global->name);
-                break;
-            } else if (!nb_global->name[0] && !strcmp(az->name, az_name)) {
-                icsbrec_availability_zone_delete(az);
-                break;
+    if (ctx->ovnisb_txn) {
+        if (az_name && strcmp(az_name, nb_global->name)) {
+            ICSBREC_AVAILABILITY_ZONE_FOR_EACH (az, ctx->ovnisb_idl) {
+                /* AZ name update locally need to update az in ISB. */
+                if (nb_global->name[0] && !strcmp(az->name, az_name)) {
+                    icsbrec_availability_zone_set_name(az, nb_global->name);
+                    break;
+                } else if (!nb_global->name[0] && !strcmp(az->name, az_name)) {
+                    icsbrec_availability_zone_delete(az);
+                    break;
+                }
             }
+            free(az_name);
+            az_name = NULL;
         }
-        free(az_name);
-        az_name = NULL;
     }
 
     if (!nb_global->name[0]) {
