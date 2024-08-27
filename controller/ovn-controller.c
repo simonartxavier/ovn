@@ -2312,9 +2312,16 @@ ct_zones_runtime_data_handler(struct engine_node *node, void *data)
                 && strcmp(t_lport->pb->type, "localnet")) {
                 /* We allocate zone-id's only to VIF, localport, l3gateway,
                  * and localnet lports. */
+                if (sbrec_port_binding_is_updated(t_lport->pb,
+                                              SBREC_PORT_BINDING_COL_TYPE)) {
+                    updated |= ct_zone_handle_port_update(&ct_zones_data->ctx,
+                                               t_lport->pb,
+                                               false, &scan_start,
+                                               min_ct_zone, max_ct_zone);
+                }
+
                 continue;
             }
-
             bool port_updated =
                     t_lport->tracked_type == TRACKED_RESOURCE_NEW ||
                     t_lport->tracked_type == TRACKED_RESOURCE_UPDATED;
