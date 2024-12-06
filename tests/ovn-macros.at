@@ -794,6 +794,12 @@ check() {
     AT_CHECK(["$@"])
 }
 
+# Runs COMMAND and checks that it does not print anything else than uuid as output.
+check_uuid() {
+    echo "$@"
+    AT_CHECK(["$@" | grep -vE '^[[0-9a-fA-F]]{8}-[[0-9a-fA-F]]{4}-[[0-9a-fA-F]]{4}-[[0-9a-fA-F]]{4}-[[0-9a-fA-F]]{12}$'], [1])
+}
+
 parse_db() {
     case $1 in
         (*:*) echo ${1%%:*} ;;
