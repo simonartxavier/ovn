@@ -880,7 +880,7 @@ for type in icmp udp tcp; do
     AS_BOX([Testing $type])
     # First time, when the packet needs to pass through pinctrl buffering
     check ovs-appctl dpctl/flush-conntrack
-    check_uuid ovn-sbctl --all destroy mac_binding
+    check ovn-sbctl --all destroy mac_binding
     wait_row_count mac_binding 0
     test_$type
 
