@@ -2178,6 +2178,17 @@ local_output_pb(int64_t tunnel_key, struct ofpbuf *ofpacts)
     put_resubmit(OFTABLE_CHECK_LOOPBACK, ofpacts);
 }
 
+static void
+local_set_ct_zone_and_output_pb(int tunnel_key, int64_t zone_id,
+                                struct ofpbuf *ofpacts)
+{
+    if (zone_id) {
+        put_load(zone_id, MFF_LOG_CT_ZONE, 0, 16, ofpacts);
+    }
+    put_load(tunnel_key, MFF_LOG_OUTPORT, 0, 32, ofpacts);
+    put_resubmit(OFTABLE_CHECK_LOOPBACK, ofpacts);
+}
+
 #define MC_OFPACTS_MAX_MSG_SIZE     8192
 #define MC_BUF_START_ID             0x9000
 
@@ -2279,16 +2290,14 @@ consider_mc_group(const struct physical_ctx *ctx,
         }
 
         int zone_id = ct_zone_find_zone(ctx->ct_zones, port->logical_port);
-        if (zone_id) {
-            put_load(zone_id, MFF_LOG_CT_ZONE, 0, 16, &ofpacts);
-        }
 
         const char *lport_name = (port->parent_port && *port->parent_port) ?
                                   port->parent_port : port->logical_port;
 
         if (type == LP_PATCH) {
             if (ldp->is_transit_switch) {
-                local_output_pb(port->tunnel_key, &ofpacts);
+                local_set_ct_zone_and_output_pb(port->tunnel_key, zone_id,
+                                                &ofpacts);
             } else {
                 remote_ramp_ports = true;
                 remote_ports = true;
@@ -2304,9 +2313,11 @@ consider_mc_group(const struct physical_ctx *ctx,
                    && (local_binding_get_primary_pb(ctx->local_bindings,
                                                     lport_name)
                        || type == LP_L3GATEWAY)) {
-            local_output_pb(port->tunnel_key, &ofpacts);
+            local_set_ct_zone_and_output_pb(port->tunnel_key, zone_id,
+                                            &ofpacts);
         } else if (simap_contains(ctx->patch_ofports, port->logical_port)) {
-            local_output_pb(port->tunnel_key, &ofpacts);
+            local_set_ct_zone_and_output_pb(port->tunnel_key, zone_id,
+                                            &ofpacts);
         } else if (type == LP_CHASSISREDIRECT
                    && port->chassis == ctx->chassis) {
             const char *distributed_port = smap_get(&port->options,
@@ -2317,7 +2328,8 @@ consider_mc_group(const struct physical_ctx *ctx,
                                            distributed_port);
                 if (distributed_binding
                     && port->datapath == distributed_binding->datapath) {
-                    local_output_pb(distributed_binding->tunnel_key, &ofpacts);
+                    local_set_ct_zone_and_output_pb(
+                        distributed_binding->tunnel_key, zone_id, &ofpacts);
                 }
             }
         } else if (!get_localnet_port(ctx->local_datapaths,
