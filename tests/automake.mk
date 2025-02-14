@@ -290,6 +290,12 @@ tests_ovstest_SOURCES = \
 	lib/test-ovn-features.c \
 	northd/test-ipam.c
 
+
+if LINUX
+tests_ovstest_SOURCES += \
+	tests/test-netlink-conntrack.c
+endif
+
 tests_ovstest_LDADD = $(OVS_LIBDIR)/daemon.lo \
     $(OVS_LIBDIR)/libopenvswitch.la lib/libovn.la \
 	controller/binding.$(OBJEXT) \
