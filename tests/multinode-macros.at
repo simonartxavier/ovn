@@ -89,6 +89,10 @@ cleanup_multinode_resources() {
     done
 }
 
+multinode_sbctl () {
+    m_as ovn-central-az1-1 ovn-sbctl "$@"
+}
+
 multinode_nbctl () {
     m_as ovn-central-az1-1 ovn-nbctl "$@"
 }
