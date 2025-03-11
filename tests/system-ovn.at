@@ -9240,6 +9240,28 @@ OVS_WAIT_UNTIL([
 # The test could succeed thanks to a lucky northd recompute...after hitting too any flows
 # Double check we never hit error condition
 AT_CHECK([grep -qE 'Too many active IPv4 mcast flows' northd/ovn-northd.log], [1])
+on_exit 'ip netns exec vm2 ps -ef | grep tcpdump'
+on_exit 'echo "in vm2"'
+on_exit 'ps -ef | grep tcpdump'
+on_exit 'echo "On Host"'
+
+on_exit 'sleep 1'
+on_exit 'ip netns exec vm2 kill `cat vm2.pid`'
+on_exit 'echo "Killing from ns"'
+
+on_exit 'ip netns exec vm2 ps -ef | grep tcpdump'
+on_exit 'echo "in vm2"'
+on_exit 'ps -ef | grep tcpdump'
+on_exit 'echo "On Host"'
+
+on_exit 'sleep 5'
+on_exit 'kill `cat vm2.pid`'
+on_exit 'echo "Killing from Host"'
+on_exit 'sleep 1'
+on_exit 'ip netns exec vm2 ps -ef | grep tcpdump'
+on_exit 'echo "in vm2"'
+on_exit 'ps -ef | grep tcpdump'
+on_exit 'echo "On Host"'
 
 OVS_APP_EXIT_AND_WAIT([ovn-controller])
 

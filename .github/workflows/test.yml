@@ -80,7 +80,7 @@ jobs:
       UNSTABLE:    ${{ matrix.cfg.unstable }}
 
     name: linux ${{ join(matrix.cfg.*, ' ') }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -241,7 +241,7 @@ jobs:
   build-linux-rpm:
     name: linux rpm fedora
     if: github.repository_owner == 'ovn-org' || github.event_name != 'schedule'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     container: fedora:40
     timeout-minutes: 30
 
