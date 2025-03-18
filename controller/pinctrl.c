@@ -7591,6 +7591,7 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
 {
     bool changed = false;
     struct svc_monitor *svc_mon;
+    VLOG_INFO("XSXS sync_svc_monitors txn=%p", ovnsb_idl_txn);
 
     LIST_FOR_EACH (svc_mon, list_node, &svc_monitors) {
         svc_mon->delete = true;
@@ -7598,14 +7599,17 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     const struct sbrec_service_monitor *sb_svc_mon;
     SBREC_SERVICE_MONITOR_TABLE_FOR_EACH (sb_svc_mon, svc_mon_table) {
+        VLOG_INFO("XSXS svx_mon %s", sb_svc_mon->logical_port);
         const struct sbrec_port_binding *pb
             = lport_lookup_by_name(sbrec_port_binding_by_name,
                                    sb_svc_mon->logical_port);
         if (!pb) {
+            VLOG_INFO("XSXS pb not found");
             continue;
         }
 
         if (pb->chassis != our_chassis) {
+            VLOG_INFO("XSXS not on right chassis");
             continue;
         }
 
@@ -7656,6 +7660,7 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
         }
 
         if (!mac_found) {
+            VLOG_INFO("XSXS mac not found");
             continue;
         }
 
@@ -7674,6 +7679,7 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
         svc_mon = pinctrl_find_svc_monitor(dp_key, port_key, &ip_addr,
                                            sb_svc_mon->port, protocol, hash);
+        VLOG_INFO("XSXS svc_mon = %p", svc_mon);
 
         if (!svc_mon) {
             svc_mon = xmalloc(sizeof *svc_mon);
@@ -7734,8 +7740,10 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
             changed = true;
         } else if (ovnsb_idl_txn) {
             /* Update the status of the service monitor. */
+            VLOG_INFO("XSXS svc_mon->status = %d for %s", svc_mon->status, svc_mon->sb_svc_mon->logical_port);
             if (svc_mon->status != SVC_MON_ST_UNKNOWN) {
                 if (svc_mon->status == SVC_MON_ST_ONLINE) {
+                    VLOG_INFO("XSXS status set to online");
                     sbrec_service_monitor_set_status(svc_mon->sb_svc_mon,
                                                      "online");
                 } else {
@@ -8606,6 +8614,7 @@ svc_monitors_run(struct rconn *swconn,
     OVS_REQUIRES(pinctrl_mutex)
 {
     *svc_monitors_next_run_time = LLONG_MAX;
+    VLOG_INFO("XSXS svc_monitors_run");
     struct svc_monitor *svc_mon;
     LIST_FOR_EACH (svc_mon, list_node, &svc_monitors) {
         char ip_[INET6_ADDRSTRLEN + 1];
@@ -8615,6 +8624,7 @@ svc_monitors_run(struct rconn *swconn,
         long long int current_time = time_msec();
         long long int next_run_time = LLONG_MAX;
         enum svc_monitor_status old_status = svc_mon->status;
+        VLOG_INFO("XSXS state=%d, current_time=%lld, svc_mon->wait_time = %lld, svc_mon->protocol=%d, svc_mon->n_success=%d, svc_mon->success_count=%d", svc_mon->state, current_time, svc_mon->wait_time, svc_mon->protocol, svc_mon->n_success, svc_mon->success_count);
         switch (svc_mon->state) {
         case SVC_MON_S_INIT:
             svc_monitor_send_health_check(swconn, svc_mon);
@@ -8628,6 +8638,7 @@ svc_monitors_run(struct rconn *swconn,
                     svc_mon->state = SVC_MON_S_OFFLINE;
                 } else {
                     svc_mon->n_success++;
+                    VLOG_INFO("XSXS state set to online");
                     svc_mon->state = SVC_MON_S_ONLINE;
                 }
                 svc_mon->next_send_time = current_time + svc_mon->interval;
@@ -8715,6 +8726,7 @@ pinctrl_handle_tcp_svc_check(struct rconn *swconn,
     if ((TCP_FLAGS(th->tcp_ctl) & (TCP_SYN | TCP_ACK))
          == (TCP_SYN | TCP_ACK)) {
         svc_mon->n_success++;
+        VLOG_INFO("XSXS state set %s to online due to reception of ack",   svc_mon->sb_svc_mon ? svc_mon->sb_svc_mon->logical_port : "");
         svc_mon->state = SVC_MON_S_ONLINE;
 
         /* Send RST packet. */
