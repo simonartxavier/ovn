@@ -7602,10 +7602,12 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
             = lport_lookup_by_name(sbrec_port_binding_by_name,
                                    sb_svc_mon->logical_port);
         if (!pb) {
+            VLOG_INFO("XSXS pb not found for %s", sb_svc_mon->logical_port);
             continue;
         }
 
         if (pb->chassis != our_chassis) {
+            VLOG_INFO("XSXS not on right chassis for %s", sb_svc_mon->logical_port);
             continue;
         }
 
@@ -7656,6 +7658,7 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
         }
 
         if (!mac_found) {
+            VLOG_INFO("XSXS mac not found for %s", sb_svc_mon->logical_port);
             continue;
         }
 
@@ -7736,13 +7739,15 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
             /* Update the status of the service monitor. */
             if (svc_mon->status != SVC_MON_ST_UNKNOWN) {
                 if (svc_mon->status == SVC_MON_ST_ONLINE) {
+                    VLOG_INFO("XSXS svc_mon->status = %d (VC_MON_ST_ONLINE) for %s, settting sb to online", svc_mon->status, svc_mon->sb_svc_mon->logical_port);
                     sbrec_service_monitor_set_status(svc_mon->sb_svc_mon,
                                                      "online");
                 } else {
+                    VLOG_INFO("XSXS svc_mon->status = %d for %s, setting sb to offline", svc_mon->status, svc_mon->sb_svc_mon->logical_port);
                     sbrec_service_monitor_set_status(svc_mon->sb_svc_mon,
                                                      "offline");
                 }
-            }
+            } else VLOG_INFO("XSXS svc_mon->status = %d (SVC_MON_ST_UNKNOWN) for %s", svc_mon->status, svc_mon->sb_svc_mon->logical_port);
         }
     }
 
@@ -8615,6 +8620,7 @@ svc_monitors_run(struct rconn *swconn,
         long long int current_time = time_msec();
         long long int next_run_time = LLONG_MAX;
         enum svc_monitor_status old_status = svc_mon->status;
+        VLOG_INFO("XSXS state=%d, current_time=%lld, svc_mon->wait_time = %lld, svc_mon->protocol=%d, svc_mon->n_success=%d, svc_mon->success_count=%d", svc_mon->state, current_time, svc_mon->wait_time, svc_mon->protocol, svc_mon->n_success, svc_mon->success_count);
         switch (svc_mon->state) {
         case SVC_MON_S_INIT:
             svc_monitor_send_health_check(swconn, svc_mon);
@@ -8628,6 +8634,7 @@ svc_monitors_run(struct rconn *swconn,
                     svc_mon->state = SVC_MON_S_OFFLINE;
                 } else {
                     svc_mon->n_success++;
+                    VLOG_INFO("XSXS state set to online");
                     svc_mon->state = SVC_MON_S_ONLINE;
                 }
                 svc_mon->next_send_time = current_time + svc_mon->interval;
@@ -8715,6 +8722,7 @@ pinctrl_handle_tcp_svc_check(struct rconn *swconn,
     if ((TCP_FLAGS(th->tcp_ctl) & (TCP_SYN | TCP_ACK))
          == (TCP_SYN | TCP_ACK)) {
         svc_mon->n_success++;
+        VLOG_INFO("XSXS state set %s to online due to reception of ack",   svc_mon->sb_svc_mon ? svc_mon->sb_svc_mon->logical_port : "");
         svc_mon->state = SVC_MON_S_ONLINE;
 
         /* Send RST packet. */
