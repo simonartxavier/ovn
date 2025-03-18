@@ -104,10 +104,22 @@ function configure_clang()
     COMMON_CFLAGS="${COMMON_CFLAGS} -Wno-error=unused-command-line-argument"
 }
 
-function run_tests()
+function build_and_run_tests()
 {
     if ! timeout -k 5m -v $TIMEOUT make distcheck \
         CFLAGS="${COMMON_CFLAGS} ${OVN_CFLAGS}" $JOBS \
+        TESTSUITEFLAGS="$JOBS $TEST_RANGE" RECHECK=$RECHECK \
+        SKIP_UNSTABLE=$SKIP_UNSTABLE
+    then
+        # testsuite.log is necessary for debugging.
+        cat */_build/sub/tests/testsuite.log
+        return 1
+    fi
+}
+
+function run_tests()
+{
+    if ! timeout -k 5m -v $TIMEOUT make check $JOBS \
         TESTSUITEFLAGS="$JOBS $TEST_RANGE" RECHECK=$RECHECK \
         SKIP_UNSTABLE=$SKIP_UNSTABLE
     then
@@ -128,7 +140,7 @@ function execute_tests()
     local stable_rc=0
     local unstable_rc=0
 
-    if ! SKIP_UNSTABLE=yes run_tests; then
+    if ! SKIP_UNSTABLE=yes build_and_run_tests; then
         stable_rc=1
     fi
 
