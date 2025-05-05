@@ -1460,8 +1460,9 @@ m4_define([OVN_CHECK_SCAPY_EDNS_CLIENT_SUBNET_SUPPORT],
 ])
 
 m4_define([OVN_CONTROLLER_EXIT],
-  [TMPPID=$(cat $1/ovn-controller.pid)
-   AT_CHECK([as $1 ovn-appctl -t ovn-controller exit --restart])
+  [TMPPID=$(cat ./$1/ovn-controller.pid)
+   AT_CHECK([as $1
+check ovn-appctl -t ovn-controller exit --restart])
    # Make sure ovn-controller stopped so that a future restart will not fail.
    # Checking debug/status is running is not enough as there might be a small race condition.
    echo "Waiting for pid $TMPPID"
