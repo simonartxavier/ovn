@@ -193,7 +193,8 @@ mac_binding_stats_process_flow_stats(struct vector *stats_vec,
 void mac_binding_stats_run(
         struct rconn *swconn OVS_UNUSED,
         struct ovsdb_idl_index *sbrec_port_binding_by_name OVS_UNUSED,
-        struct vector *stats_vec, uint64_t *req_delay, void *data);
+        struct vector *stats_vec, uint64_t *req_delay, void *data,
+        long long now);
 
 /* FDB stat processing. */
 void fdb_stats_process_flow_stats(struct vector *stats_vec,
@@ -202,7 +203,8 @@ void fdb_stats_process_flow_stats(struct vector *stats_vec,
 void fdb_stats_run(
         struct rconn *swconn OVS_UNUSED,
         struct ovsdb_idl_index *sbrec_port_binding_by_name OVS_UNUSED,
-        struct vector *stats_vec, uint64_t *req_delay, void *data);
+        struct vector *stats_vec, uint64_t *req_delay, void *data,
+        long long now);
 
 /* Packet buffering. */
 void bp_packet_data_destroy(struct bp_packet_data *pd);
@@ -237,6 +239,7 @@ void mac_binding_probe_stats_process_flow_stats(
 void mac_binding_probe_stats_run(
         struct rconn *swconn,
         struct ovsdb_idl_index *sbrec_port_binding_by_name,
-        struct vector *stats_vec, uint64_t *req_delay, void *data);
+        struct vector *stats_vec, uint64_t *req_delay, void *data,
+        long long now);
 
 #endif /* controller/mac-cache.h */

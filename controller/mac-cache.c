@@ -397,10 +397,10 @@ void
 mac_binding_stats_run(
         struct rconn *swconn OVS_UNUSED,
         struct ovsdb_idl_index *sbrec_port_binding_by_name OVS_UNUSED,
-        struct vector *stats_vec, uint64_t *req_delay, void *data)
+        struct vector *stats_vec, uint64_t *req_delay, void *data,
+        long long timewall_now)
 {
     struct mac_cache_data *cache_data = data;
-    long long timewall_now = time_wall_msec();
 
     struct mac_cache_stats *stats;
     VECTOR_FOR_EACH_PTR (stats_vec, stats) {
@@ -492,10 +492,9 @@ void
 fdb_stats_run(struct rconn *swconn OVS_UNUSED,
               struct ovsdb_idl_index *sbrec_port_binding_by_name OVS_UNUSED,
               struct vector *stats_vec,
-              uint64_t *req_delay, void *data)
+              uint64_t *req_delay, void *data, long long timewall_now)
 {
     struct mac_cache_data *cache_data = data;
-    long long timewall_now = time_wall_msec();
 
     struct mac_cache_stats *stats;
     VECTOR_FOR_EACH_PTR (stats_vec, stats) {
@@ -863,9 +862,8 @@ mac_binding_probe_stats_run(
         struct rconn *swconn,
         struct ovsdb_idl_index *sbrec_port_binding_by_name,
         struct vector *stats_vec,
-        uint64_t *req_delay, void *data)
+        uint64_t *req_delay, void *data, long long timewall_now)
 {
-    long long timewall_now = time_wall_msec();
     struct mac_cache_data *cache_data = data;
 
     struct mac_cache_stats *stats;
