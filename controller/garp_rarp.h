@@ -21,6 +21,7 @@
 #include "cmap.h"
 #include "sset.h"
 #include "openvswitch/types.h"
+#include "if-status.h"
 
 /* Contains a single mac and ip address that should be announced. */
 struct garp_rarp_node {
@@ -57,6 +58,7 @@ struct garp_rarp_ctx_in {
     const struct hmap *local_datapaths;
     const struct sset *active_tunnels;
     struct ed_type_garp_rarp *data;
+    struct if_status_mgr *mgr;
 };
 
 struct ed_type_garp_rarp {

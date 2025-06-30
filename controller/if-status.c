@@ -191,6 +191,8 @@ struct ovs_iface {
     uint16_t mtu;           /* Extracted from OVS interface.mtu field. */
     enum can_bind bind_type;/* CAN_BIND_AS_MAIN or CAN_BIND_AS_ADDITIONAL */
     bool is_vif;            /* Vifs, container or virtual ports */
+    bool reclaimed;         /* Iface, which was claimed by another chassis,
+                             * is claimed */
 };
 
 static uint64_t ifaces_usage;
@@ -314,6 +316,9 @@ if_status_mgr_claim_iface(struct if_status_mgr *mgr,
                sizeof(iface->pb_uuid));
     }
     if (!sb_readonly) {
+        if (pb->chassis && pb->chassis != chassis_rec) {
+            iface->reclaimed = true;
+        }
         if (bind_type == CAN_BIND_AS_MAIN) {
             set_pb_chassis_in_sbrec(pb, chassis_rec, true);
         } else if (bind_type == CAN_BIND_AS_ADDITIONAL) {
@@ -344,6 +349,18 @@ bool
 if_status_mgr_iface_is_present(struct if_status_mgr *mgr, const char *iface_id)
 {
     return !!shash_find_data(&mgr->ifaces, iface_id);
+}
+
+bool
+if_status_reclaimed(struct if_status_mgr *mgr, const char *iface_id)
+{
+    struct ovs_iface *iface = shash_find_data(&mgr->ifaces, iface_id);
+    if (!iface) {
+        return false;
+    }
+    bool reclaimed = iface->reclaimed;
+    iface->reclaimed = false;
+    return reclaimed;
 }
 
 void

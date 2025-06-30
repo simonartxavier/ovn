@@ -24,6 +24,7 @@
 #include "ovn/lex.h"
 #include "garp_rarp.h"
 #include "ovn-sb-idl.h"
+#include "if-status.h"
 
 VLOG_DEFINE_THIS_MODULE(garp_rarp);
 static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 20);
@@ -32,6 +33,10 @@ static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 20);
 
 static bool garp_rarp_data_has_changed = false;
 static struct garp_rarp_data garp_rarp_data;
+
+static void
+garp_rarp_node_del(const struct eth_addr ea, ovs_be32 ip,
+                   uint32_t dp_key, uint32_t port_key);
 
 /* Get localnet vifs, local l3gw ports and ofport for localnet patch ports. */
 static void
@@ -144,7 +149,8 @@ consider_nat_address(struct ovsdb_idl_index *sbrec_port_binding_by_name,
                      const struct sbrec_chassis *chassis,
                      struct shash *nat_addresses,
                      struct sset *non_local_lports,
-                     struct sset *local_lports)
+                     struct sset *local_lports,
+                     struct if_status_mgr *mgr)
 {
     struct lport_addresses *laddrs = xmalloc(sizeof *laddrs);
     char *lport = NULL;
@@ -165,6 +171,16 @@ consider_nat_address(struct ovsdb_idl_index *sbrec_port_binding_by_name,
             free(lport);
             return;
         } else {
+            const struct sbrec_port_binding *cr_pb =
+                lport_lookup_by_name(sbrec_port_binding_by_name, lport);
+            if (if_status_reclaimed(mgr, cr_pb->logical_port)) {
+                /* lport just got claimed. make sure to reset garp count. */
+                for (size_t i = 0; i < laddrs->n_ipv4_addrs; i++) {
+                    garp_rarp_node_del(laddrs->ea, laddrs->ipv4_addrs[i].addr,
+                                       pb->datapath->tunnel_key,
+                                       pb->tunnel_key);
+                }
+            }
             sset_add(local_lports, lport);
         }
     }
@@ -191,7 +207,8 @@ get_nat_addresses_and_keys(struct ovsdb_idl_index *sbrec_port_binding_by_name,
                            const struct sbrec_chassis *chassis,
                            struct shash *nat_addresses,
                            struct sset *non_local_lports,
-                           struct sset *local_lports)
+                           struct sset *local_lports,
+                           struct if_status_mgr *mgr)
 {
     const char *gw_port;
     SSET_FOR_EACH (gw_port, local_l3gw_ports) {
@@ -209,7 +226,8 @@ get_nat_addresses_and_keys(struct ovsdb_idl_index *sbrec_port_binding_by_name,
                                      nat_address_keys, chassis,
                                      nat_addresses,
                                      non_local_lports,
-                                     local_lports);
+                                     local_lports,
+                                     mgr);
             }
         } else {
             /* Continue to support options:nat-addresses for version
@@ -222,7 +240,8 @@ get_nat_addresses_and_keys(struct ovsdb_idl_index *sbrec_port_binding_by_name,
                                      nat_address_keys, chassis,
                                      nat_addresses,
                                      non_local_lports,
-                                     local_lports);
+                                     local_lports,
+                                     mgr);
             }
         }
     }
@@ -269,6 +288,19 @@ garp_rarp_lookup(const struct eth_addr ea, ovs_be32 ipv4, uint32_t dp_key,
         return grn;
     }
     return NULL;
+}
+
+static void
+garp_rarp_node_del(const struct eth_addr ea, ovs_be32 ip,
+                   uint32_t dp_key, uint32_t port_key)
+{
+    struct garp_rarp_node *grn = garp_rarp_lookup(ea, ip, dp_key, port_key);
+    if (grn) {
+        cmap_remove(&garp_rarp_data.data, &grn->cmap_node,
+                    garp_rarp_node_hash_struct(grn));
+        garp_rarp_node_free(grn);
+        garp_rarp_data_has_changed = true;
+    }
 }
 
 static void
@@ -433,7 +465,8 @@ garp_rarp_run(struct garp_rarp_ctx_in *r_ctx_in)
                                &nat_ip_keys, &local_l3gw_ports,
                                r_ctx_in->chassis, &nat_addresses,
                                &r_ctx_in->data->non_local_lports,
-                               &r_ctx_in->data->local_lports);
+                               &r_ctx_in->data->local_lports,
+                               r_ctx_in->mgr);
 
     /* Update send_garp_rarp_data. */
     const char *iface_id;
