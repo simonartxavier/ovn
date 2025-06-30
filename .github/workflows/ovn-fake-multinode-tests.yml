@@ -101,7 +101,7 @@ jobs:
       RELAY_IMAGE: "ovn/ovn-multi-node:${{ github.ref_name }}"
       GW_IMAGE: "ovn/ovn-multi-node:${{ github.ref_name }}"
       # Disable SSL/TLS for now. Revisit this if required.
-      ENABLE_SSL: no
+      ENABLE_SSL: yes
       CC: gcc
       OPTS: "--disable-ssl"
       dependencies: |
