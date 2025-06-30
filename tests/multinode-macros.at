@@ -89,6 +89,37 @@ check_fake_multinode_setup_by_nodes() {
         on_exit "m_as $c ovs-ofctl dump-flows br-int > flow-${c}.txt"
         on_exit "m_as $c ovs-vsctl get open . external_ids > extids-${c}.txt"
     done
+
+    # Only check ssl on one chassis - whole setup uses ssl or not.
+    if [[ -z "${REMOTE_PROT}" ]]; then
+        enable_ssl=$(m_as $c ps -efww | grep ovn-controller | grep private-key)
+        if [[ -n "$enable_ssl" ]]; then
+            private_key=$(m_as $c ps -efww | grep ovn-controller | sed -n 's/.*--private-key=\([[^ ]]*\).*/\1/p')
+            ssl_cert=$(m_as $c ps -efww | grep ovn-controller | sed -n 's/.*--certificate=\([[^ ]]*\).*/\1/p')
+            ssl_ca_cert=$(m_as $c ps -efww | grep ovn-controller | sed -n 's/.*--ca-cert=\([[^ ]]*\).*/\1/p')
+            CONTROLLER_SSL_ARGS="--ovn-controller-ssl-key=$private_key \
+                                 --ovn-controller-ssl-cert=$ssl_cert \
+                                 --ovn-controller-ssl-ca-cert=$ssl_ca_cert"
+            NORTHD_SSL_ARGS="--ovn-nb-db-ssl-key=$private_key \
+                  --ovn-nb-db-ssl-cert=$ssl_cert \
+                  --ovn-nb-db-ssl-ca-cert=$ssl_ca_cert \
+                  --ovn-sb-db-ssl-key=$private_key \
+                  --ovn-sb-db-ssl-cert=$ssl_cert \
+                  --ovn-sb-db-ssl-ca-cert=$ssl_ca_cert \
+                  --ovn-northd-ssl-key=$private_key \
+                  --ovn-northd-ssl-cert=$ssl_cert \
+                  --ovn-northd-ssl-ca-cert=$ssl_ca_cert"
+
+            REMOTE_PROT=ssl
+        else
+            CONTROLLER_SSL_ARGS=""
+            NORTHD_SSL_ARGS=""
+            REMOTE_PROT=tcp
+        fi
+        export CONTROLLER_SSL_ARGS
+        export NORTHD_SSL_ARGS
+        export REMOTE_PROT
+    fi
 }
 
 check_fake_multinode_setup() {
@@ -128,9 +159,10 @@ multinode_setup_northd() {
 
     multinode_cleanup_northd $c
 
-    m_as $c /usr/share/ovn/scripts/ovn-ctl start_northd
-    m_as $c ovn-nbctl set-connection ptcp:6641
-    m_as $c ovn-sbctl set-connection ptcp:6642
+    echo "Using ${NORTHD_SSL_ARGS} for northd".
+    m_as $c /usr/share/ovn/scripts/ovn-ctl start_northd ${NORTHD_SSL_ARGS}
+    m_as $c ovn-nbctl set-connection p${REMOTE_PROT}:6641
+    m_as $c ovn-sbctl set-connection p${REMOTE_PROT}:6642
 }
 
 # multinode_setup_controller NODE ENCAP_IP REMOTE_IP [ENCAP_TYPE]
@@ -148,11 +180,12 @@ multinode_setup_controller() {
     m_as $c sh -c "rm -f /etc/openvswitch/*.db"
 
     m_as $c /usr/share/openvswitch/scripts/ovs-ctl start --system-id=$c
-    m_as $c /usr/share/ovn/scripts/ovn-ctl start_controller
+    echo "Using ${CONTROLLER_SSL_ARGS} for ovn-controller".
+    m_as $c /usr/share/ovn/scripts/ovn-ctl start_controller ${CONTROLLER_SSL_ARGS}
 
     m_as $c ovs-vsctl set open . external_ids:ovn-encap-ip=$encap_ip
     m_as $c ovs-vsctl set open . external-ids:ovn-encap-type=$encap_type
-    m_as $c ovs-vsctl set open . external-ids:ovn-remote=tcp:$remote_ip:6642
+    m_as $c ovs-vsctl set open . external-ids:ovn-remote=${REMOTE_PROT}:$remote_ip:6642
     m_as $c ovs-vsctl set open . external-ids:ovn-openflow-probe-interval=60
     m_as $c ovs-vsctl set open . external-ids:ovn-remote-probe-interval=180000
     m_as $c ovs-vsctl set open . external-ids:ovn-bridge-datapath-type=system
