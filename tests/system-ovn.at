@@ -5137,7 +5137,7 @@ ADD_VETH(lsp, lsp, br-int, "42.42.42.1/24", "00:00:00:00:00:01", \
 check ovn-nbctl --wait=hv -t 3 sync
 
 # Start IPv4 TCP server on lsp.
-NETNS_DAEMONIZE([lsp], [nc -l -k 42.42.42.1 4041], [lsp0.pid])
+NETNS_START_NC([lsp], [-l -k], [42.42.42.1], [4041], [lsp0])
 
 # Check that IPv4 TCP hairpin connection succeeds on both VIPs.
 NS_CHECK_EXEC([lsp], [nc 88.88.88.88 8080 -z], [0], [ignore], [ignore])
