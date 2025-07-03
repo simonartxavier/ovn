@@ -313,6 +313,17 @@ m4_define([NETNS_START_DHCPD],
     ]
 )
 
+# NETNS_START_NC([namespace], [options], [ip], [port], [name])
+#
+# Helper to properly start tcpdump and wait for the startup.
+# The tcpdump output is available in <name>.tcpdump file.
+m4_define([NETNS_START_NC],
+    [
+     NETNS_DAEMONIZE([$1], [nc $2 $3 $4 >$5.nc 2>$5.stderr], [$5.pid])
+     OVS_WAIT_UNTIL([ip netns exec $1 netstat -tulpn | grep $4])
+    ]
+)
+
 # OVS_CHECK_VXLAN()
 #
 # Do basic check for vxlan functionality, skip the test if it's not there.
