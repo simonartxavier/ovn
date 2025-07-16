@@ -43,6 +43,7 @@ struct sbrec_mac_binding_table;
 
 void pinctrl_init(void);
 void pinctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
+                 int ovnsb_txn_status,
                  struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
                  struct ovsdb_idl_index *sbrec_port_binding_by_key,
                  struct ovsdb_idl_index *sbrec_port_binding_by_name,

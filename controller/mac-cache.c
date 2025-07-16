@@ -290,6 +290,7 @@ fdb_add(struct hmap *map, struct fdb_data fdb_data, long long timestamp)
 
     fdb->data = fdb_data;
     fdb->timestamp = timestamp;
+    fdb->resend_on_commit_failure = false;
 
     return fdb;
 }

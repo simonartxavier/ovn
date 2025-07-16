@@ -6367,6 +6367,7 @@ main(int argc, char *argv[])
     /* Main loop. */
     bool sb_monitor_all = false;
     struct tracked_acl_ids *tracked_acl_ids = NULL;
+    int ovnsb_txn_status = 1;
     while (!exit_args.exiting) {
         ovsrcu_quiesce_end();
 
@@ -6666,6 +6667,7 @@ main(int argc, char *argv[])
                                         time_msec());
                         pinctrl_update(ovnsb_idl_loop.idl);
                         pinctrl_run(ovnsb_idl_txn,
+                                    ovnsb_txn_status,
                                     sbrec_datapath_binding_by_key,
                                     sbrec_port_binding_by_key,
                                     sbrec_port_binding_by_name,
@@ -6879,7 +6881,7 @@ main(int argc, char *argv[])
             poll_immediate_wake();
         }
 
-        int ovnsb_txn_status = ovsdb_idl_loop_commit_and_wait(&ovnsb_idl_loop);
+        ovnsb_txn_status = ovsdb_idl_loop_commit_and_wait(&ovnsb_idl_loop);
         if (!ovnsb_txn_status) {
             VLOG_INFO("OVNSB commit failed, force recompute next time.");
             engine_set_force_recompute_immediate();
