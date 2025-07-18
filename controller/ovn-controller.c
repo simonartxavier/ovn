@@ -364,9 +364,13 @@ update_sb_monitors(struct ovsdb_idl *ovnsb_idl,
             name = n->name;
             /* Skip the VIFs we bound already, we should have a local datapath
              * for those. */
+            /* Note that we coud have a local_binding and a pb for this
+             * local_binding but still not be bound e.g. requested_chassis
+             * set to different chassis*/
             const struct sbrec_port_binding *local_pb
                 = local_binding_get_primary_pb(local_bindings, name);
-            if (local_pb && get_lport_type(local_pb) == LP_VIF) {
+            if (local_pb && get_lport_type(local_pb) == LP_VIF &&
+                local_pb->chassis == chassis) {
                 continue;
             }
             sbrec_port_binding_add_clause_logical_port(&pb, OVSDB_F_EQ, name);
