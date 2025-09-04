@@ -7420,7 +7420,7 @@ main(int argc, char *argv[])
                         stopwatch_start(PINCTRL_RUN_STOPWATCH_NAME,
                                         time_msec());
                         pinctrl_update(ovnsb_idl_loop.idl);
-                        pinctrl_run(ovnsb_idl_txn,
+                        pinctrl_run(ovnsb_idl_txn, ovnsb_idl_loop.idl,
                                     sbrec_datapath_binding_by_key,
                                     sbrec_port_binding_by_key,
                                     sbrec_port_binding_by_name,

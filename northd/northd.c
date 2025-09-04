@@ -3003,6 +3003,10 @@ create_or_get_service_mon(struct ovsdb_idl_txn *ovnsb_txn,
             sbrec_service_monitor_set_chassis_name(mon_info->sbrec_mon,
                                                    chassis_name);
         }
+        if (mon_info->sbrec_mon->local != local_backend) {
+            sbrec_service_monitor_set_local(mon_info->sbrec_mon,
+                                            local_backend);
+        }
         /*
          * if a similar record was created by the interconet database,
          * then we transfer ownership rights to delete to northd:

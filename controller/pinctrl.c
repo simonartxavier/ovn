@@ -324,6 +324,7 @@ static void init_svc_monitors(void);
 static void destroy_svc_monitors(void);
 static void sync_svc_monitors(
     struct ovsdb_idl_txn *ovnsb_idl_txn,
+    const struct ovsdb_idl *idl,
     const struct sbrec_service_monitor_table *svc_mon_table,
     struct ovsdb_idl_index *sbrec_port_binding_by_name,
     const struct sbrec_chassis *our_chassis)
@@ -4050,6 +4051,7 @@ pinctrl_update(const struct ovsdb_idl *idl)
 /* Called by ovn-controller. */
 void
 pinctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
+            const struct ovsdb_idl *idl,
             struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
             struct ovsdb_idl_index *sbrec_port_binding_by_key,
             struct ovsdb_idl_index *sbrec_port_binding_by_name,
@@ -4091,8 +4093,8 @@ pinctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
                          sbrec_datapath_binding_by_key,
                          sbrec_port_binding_by_name,
                          sbrec_mac_binding_by_lport_ip);
-    sync_svc_monitors(ovnsb_idl_txn, svc_mon_table, sbrec_port_binding_by_name,
-                      chassis);
+    sync_svc_monitors(ovnsb_idl_txn, idl, svc_mon_table,
+                      sbrec_port_binding_by_name, chassis);
     bfd_monitor_run(ovnsb_idl_txn, bfd_table, sbrec_port_binding_by_name,
                     chassis);
     run_put_fdbs(ovnsb_idl_txn, sbrec_port_binding_by_key,
@@ -7017,6 +7019,7 @@ pinctrl_find_svc_monitor(uint32_t dp_key, uint32_t port_key,
 
 static void
 sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
+                  const struct ovsdb_idl *idl,
                   const struct sbrec_service_monitor_table *svc_mon_table,
                   struct ovsdb_idl_index *sbrec_port_binding_by_name,
                   const struct sbrec_chassis *our_chassis)
@@ -7034,7 +7037,9 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
         const struct sbrec_port_binding *pb
             = lport_lookup_by_name(sbrec_port_binding_by_name,
                                    sb_svc_mon->logical_port);
-        if (!pb || !sb_svc_mon->local) {
+        if (!pb || (sbrec_server_has_service_monitor_table_col_local(idl) &&
+                    !sb_svc_mon->local)) {
+
             continue;
         }
 
