@@ -123,30 +123,42 @@ jobs:
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "-100" }
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "101-200" }
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "201-", unstable: unstable }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.03, test_range: "-100" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.03, test_range: "101-" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "-100" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "101-200" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "201-" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "-100" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "101-200" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "201-" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.09, test_range: "-100" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.09, test_range: "101-200" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.09, test_range: "201-" }
         - { arch: x86, compiler: gcc, opts: --disable-ssl }
 
     steps:
     - name: system-level-dependencies
-      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') }}
+      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') || (matrix.cfg.testsuite == 'upgrade-test') }}
       run: |
         sudo apt update
         sudo apt -y install linux-modules-extra-$(uname -r)
 
     - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
+      if: github.event_name == 'push' || github.event_name == 'pull_request' || matrix.cfg.testsuite == 'upgrade-test'
       uses: actions/checkout@v4
       with:
         submodules: recursive
+        fetch-depth: ${{ matrix.cfg.testsuite == 'upgrade-test' && 0 || 1 }}
 
-    # For weekly runs, don't update submodules
+    # For weekly runs (no upgrade-tests), don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' && matrix.cfg.testsuite != 'upgrade-test'
       uses: actions/checkout@v4
 
-    # Weekly runs test using the tip of the most recent stable OVS branch
+    # Weekly runs (no upgrade-tests) test using the tip of the most recent stable OVS branch
     # instead of the submodule.
     - name: checkout OVS
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' && matrix.cfg.testsuite != 'upgrade-test'
       uses: actions/checkout@v4
       with:
         repository: 'openvswitch/ovs'
@@ -154,7 +166,7 @@ jobs:
         path: 'ovs'
 
     - name: checkout OVS most recent stable branch.
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' && matrix.cfg.testsuite != 'upgrade-test'
       run: |
         git checkout \
           $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
@@ -184,13 +196,26 @@ jobs:
         podman load -i /tmp/image.tar
         rm -rf /tmp/image.tar
 
+    # Set BASE_VERSION env var for upgrade tests
+    - name: Set upgrade test env
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: echo "BASE_VERSION=${{ matrix.cfg.base_version }}" >> $GITHUB_ENV
+
+    # Regular build steps
     - name: build
-      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') }}
+      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') || (matrix.cfg.testsuite == 'upgrade-test') }}
       run: sudo -E ./.ci/ci.sh --archive-logs --timeout=2h
 
     - name: build
-      if: ${{ !startsWith(matrix.cfg.testsuite, 'system-test') }}
+      if: ${{ !startsWith(matrix.cfg.testsuite, 'system-test') && matrix.cfg.testsuite != 'upgrade-test' }}
       run: ./.ci/ci.sh --archive-logs --timeout=2h
+
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ join(matrix.cfg.*, '-') }}
+        path: build-logs/
 
     - name: upload logs on failure
       if: failure() || cancelled()

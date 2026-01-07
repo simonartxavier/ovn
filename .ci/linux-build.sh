@@ -198,6 +198,29 @@ function execute_system_tests()
     fi
 }
 
+function execute_upgrade_tests()
+{
+    . .ci/linux-util.sh
+
+    local stable_rc=0
+
+    SKIP_LIST=$(ovn_upgrade_get_skip_list "$BASE_VERSION")
+    if [ -n "$SKIP_LIST" ]; then
+        echo "Skipping tests for $BASE_VERSION: $SKIP_LIST"
+        TEST_RANGE=$(ovn_upgrade_adjust_test_range "$TEST_RANGE" "$SKIP_LIST")
+    fi
+
+    if ! sudo timeout -k 5m -v $TIMEOUT make check-kernel \
+        TESTSUITEFLAGS="$TEST_RANGE" RECHECK=$RECHECK; then
+        cat tests/system-kmod-testsuite.log
+        stable_rc=1
+    fi
+
+    if [[ $stable_rc -ne 0 ]]; then
+        exit 1
+    fi
+}
+
 configure_$CC
 
 if [ "$TESTSUITE" ]; then
@@ -224,6 +247,11 @@ if [ "$TESTSUITE" ]; then
         sudo bash -c "echo 2048 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
         execute_system_tests "check-system-dpdk" "system-dpdk-testsuite.log"
         ;;
+
+        "upgrade-test")
+        execute_upgrade_tests
+        ;;
+
     esac
 else
     configure_ovn $OPTS

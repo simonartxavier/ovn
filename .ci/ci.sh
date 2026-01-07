@@ -59,6 +59,10 @@ function archive_logs() {
         tar -czvf $CONTAINER_WORKSPACE/logs.tgz $log_dir
     "
     ${CONTAINER_CMD} cp "$CONTAINER_ID:/$CONTAINER_WORKSPACE/logs.tgz" logs.tgz
+    # Copy build-logs if they exist (for upgrade tests)
+    if ${CONTAINER_CMD} exec "$CONTAINER_ID" test -d "$CONTAINER_WORKDIR/build-logs" 2>/dev/null; then
+        ${CONTAINER_CMD} cp "$CONTAINER_ID:$CONTAINER_WORKDIR/build-logs" .
+    fi
 }
 
 function remove_container() {
@@ -95,13 +99,52 @@ function overwrite_jobs() {
     "
 }
 
+function run_upgrade_tests() {
+    container_exec "
+        cd $CONTAINER_WORKDIR
+        . .ci/linux-util.sh
+        mkdir -p $CONTAINER_WORKDIR/build-logs
+
+        # Save current CI scripts (will be replaced by base version after checkout)
+        cp -rf .ci /tmp/ovn-upgrade-ci
+        
+        # Build current version
+        ovs_ovn_upgrade_build build-logs/build-current.log
+        ovn_upgrade_save_current_binaries
+        
+        # Checkout base version
+        ovn_upgrade_checkout_base '$BASE_VERSION' build-logs/git.log
+        
+        # Apply test patches
+        ovn_upgrade_apply_tests_patches
+        
+        # Build base with patches
+        ovn_upgrade_patch_for_ovn_debug
+        ovs_ovn_upgrade_build build-logs/build-base.log
+        ovn_upgrade_save_ovn_debug
+        git checkout controller/lflow.h
+        ovn_upgrade_build build-logs/build-base.log
+        
+        # Restore binaries
+        ovn_upgrade_restore_binaries
+
+        # Restore current CI scripts for test execution
+        cp -f /tmp/ovn-upgrade-ci/linux-build.sh .ci/linux-build.sh
+        cp -f /tmp/ovn-upgrade-ci/linux-util.sh .ci/linux-util.sh
+    "
+}
+
 function run_tests() {
+    if [ "$TESTSUITE" = "upgrade-test" ]; then
+        run_upgrade_tests
+    fi
     container_exec "
         cd $CONTAINER_WORKDIR \
         && \
         ARCH=$ARCH CC=$CC LIBS=$LIBS OPTS=$OPTS TESTSUITE=$TESTSUITE \
         TEST_RANGE=$TEST_RANGE SANITIZERS=$SANITIZERS DPDK=$DPDK \
         RECHECK=$RECHECK UNSTABLE=$UNSTABLE TIMEOUT=$TIMEOUT \
+        BASE_VERSION=$BASE_VERSION \
         ./.ci/linux-build.sh
     "
 }
