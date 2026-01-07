@@ -1,7 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -x
+# Enable debug output for CI, optional for local
+if [ "${NO_DEBUG:-0}" = "0" ]; then
+    set -x
+fi
 
 ARCH=${ARCH:-"x86_64"}
 USE_SPARSE=${USE_SPARSE:-"yes"}
@@ -181,7 +184,7 @@ function run_system_tests()
 
     if ! sudo timeout -k 5m -v $TIMEOUT make $JOBS $type \
         TESTSUITEFLAGS="$TEST_RANGE" RECHECK=$RECHECK \
-        SKIP_UNSTABLE=$SKIP_UNSTABLE; then
+        SKIP_UNSTABLE=$SKIP_UNSTABLE UPGRADE_TEST=$UPGRADE_TEST; then
         # $log_file is necessary for debugging.
         cat tests/$log_file
         return 1
@@ -190,8 +193,15 @@ function run_system_tests()
 
 function execute_system_tests()
 {
-    configure_ovn $OPTS
-    make $JOBS || { cat config.log; exit 1; }
+    local test_type=$1
+    local log_file=$2
+    local skip_build=$3
+
+    # Only build if not already built (upgrade tests build separately)
+    if [ "$skip_build" != "yes" ]; then
+        configure_ovn $OPTS
+        make $JOBS || { cat config.log; exit 1; }
+    fi
 
     local stable_rc=0
     local unstable_rc=0
@@ -202,7 +212,8 @@ function execute_system_tests()
 
     if [ "$UNSTABLE" ]; then
         if ! SKIP_UNSTABLE=no TEST_RANGE="-k unstable" RECHECK=yes \
-                run_system_tests $@; then
+                UPGRADE_TEST=$UPGRADE_TEST run_system_tests $test_type \
+                                                            $log_file; then
             unstable_rc=1
         fi
     fi
@@ -210,6 +221,72 @@ function execute_system_tests()
     if [[ $stable_rc -ne 0 ]] || [[ $unstable_rc -ne 0 ]]; then
         exit 1
     fi
+}
+
+function execute_upgrade_tests()
+{
+    . .ci/linux-util.sh
+
+    # Save current CI scripts (will be replaced by base version after checkout)
+    cp -rf .ci /tmp/ovn-upgrade-ci
+
+    # Build current version
+    log "Building current version..."
+    mkdir -p logs
+    configure_ovn $OPTS >> logs/build-current.log 2>&1 || {
+        log "configure ovn failed - see config.log and logs/build-current.log"
+        exit 1
+    }
+    make $JOBS >> logs/build-current.log 2>&1 || {
+        log "building ovn failed - see logs/build-current.log"
+        exit 1
+    }
+
+    ovn_upgrade_save_current_binaries
+
+    # Checkout base version
+    ovn_upgrade_checkout_base "$BASE_VERSION" logs/git.log
+
+    # Clean from current version
+    log "Cleaning build artifacts..."
+    make distclean >> logs/build-base.log 2>&1 || true
+    (cd ovs && make distclean >> ../logs/build-base.log 2>&1) || true
+
+    # Apply test patches
+    ovn_upgrade_apply_tests_patches
+
+    # Build base with patches
+    ovn_upgrade_patch_for_ovn_debug
+
+    # Build (modified) base version
+    log "Building base version (with patched lflow.h)..."
+    configure_ovn $OPTS >> logs/build-base.log 2>&1 || {
+        log "configure ovn failed - see config.log and logs/build-base.log"
+        exit 1
+    }
+    make $JOBS >> logs/build-base.log 2>&1 || {
+        log "building ovn failed - see logs/build-base.log"
+        exit 1
+    }
+    ovn_upgrade_save_ovn_debug
+
+    # Build (clean) base version
+    log "Rebuilding base version (clean lflow.h)..."
+    git checkout controller/lflow.h >> logs/git.log 2>&1
+    make $JOBS >> logs/build-base.log 2>&1 || {
+        log "building ovn failed - see logs/build-base.log"
+        exit 1
+    }
+
+    # Restore binaries
+    ovn_upgrade_restore_binaries
+
+    # Restore current CI scripts for test execution
+    cp -f /tmp/ovn-upgrade-ci/linux-build.sh .ci/linux-build.sh
+    cp -f /tmp/ovn-upgrade-ci/linux-util.sh .ci/linux-util.sh
+
+    UPGRADE_TEST=yes execute_system_tests "check-kernel" \
+                                          "system-kmod-testsuite.log" "yes"
 }
 
 configure_$CC
@@ -238,6 +315,11 @@ if [ "$TESTSUITE" ]; then
         sudo bash -c "echo 2048 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
         execute_system_tests "check-system-dpdk" "system-dpdk-testsuite.log"
         ;;
+
+        "upgrade-test")
+        execute_upgrade_tests
+        ;;
+
     esac
 else
     configure_ovn $OPTS
