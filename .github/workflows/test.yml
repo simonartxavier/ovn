@@ -123,30 +123,36 @@ jobs:
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "-100" }
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "101-200" }
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "201-", unstable: unstable }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.03, test_range: "-100" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.03, test_range: "101-200" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.03, test_range: "201-" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "-100" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "101-200" }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "201-" }
         - { arch: x86, compiler: gcc, opts: --disable-ssl }
 
     steps:
     - name: system-level-dependencies
-      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') }}
+      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') || (matrix.cfg.testsuite == 'upgrade-test') }}
       run: |
         sudo apt update
         sudo apt -y install linux-modules-extra-$(uname -r)
 
     - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
+      if: github.event_name == 'push' || github.event_name == 'pull_request' || matrix.cfg.testsuite == 'upgrade-test'
       uses: actions/checkout@v4
       with:
         submodules: recursive
 
-    # For weekly runs, don't update submodules
+    # For weekly runs (no upgrade-tests), don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' && matrix.cfg.testsuite != 'upgrade-test'
       uses: actions/checkout@v4
 
-    # Weekly runs test using the tip of the most recent stable OVS branch
+    # Weekly runs (no upgrade-tests) test using the tip of the most recent stable OVS branch
     # instead of the submodule.
     - name: checkout OVS
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' && matrix.cfg.testsuite != 'upgrade-test'
       uses: actions/checkout@v4
       with:
         repository: 'openvswitch/ovs'
@@ -154,7 +160,7 @@ jobs:
         path: 'ovs'
 
     - name: checkout OVS most recent stable branch.
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' && matrix.cfg.testsuite != 'upgrade-test'
       run: |
         git checkout \
           $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
@@ -184,13 +190,88 @@ jobs:
         podman load -i /tmp/image.tar
         rm -rf /tmp/image.tar
 
+    # Upgrade test specific steps
+    - name: Build current ovn-controller (upgrade test)
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        mkdir -p build-logs
+        . .ci/linux-util.sh
+        if ! ovs_ovn_upgrade_build build-logs/build-current.log; then
+          echo "Build FAILED"
+          exit 1
+        fi
+        ovn_upgrade_save_current_binaries
+
+    - name: Checkout base version (upgrade test)
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        BASE_VERSION="${{ matrix.cfg.base_version }}"
+        . .ci/linux-util.sh
+        if ! ovn_upgrade_checkout_base "$BASE_VERSION" build-logs/git.log; then
+          echo "Checkout FAILED"
+          exit 1
+        fi
+
+    - name: Apply test patches (upgrade test)
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        . .ci/linux-util.sh
+        ovn_upgrade_apply_tests_patches
+
+    - name: Build base version for ovn-debug (upgrade test)
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        . .ci/linux-util.sh
+        ovn_upgrade_patch_for_ovn_debug
+        if ! ovs_ovn_upgrade_build build-logs/build-base.log; then
+          echo "Build FAILED"
+          exit 1
+        fi
+        ovn_upgrade_save_ovn_debug
+
+    - name: Rebuild base version clean (upgrade test)
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        . .ci/linux-util.sh
+        git checkout controller/lflow.h
+        if ! ovn_upgrade_build build-logs/build-base.log; then
+          echo "Rebuild FAILED"
+          exit 1
+        fi
+
+    - name: Replace binaries with current (upgrade test)
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        . .ci/linux-util.sh
+        ovn_upgrade_restore_binaries
+
+    - name: Set environment for upgrade test
+      if: matrix.cfg.testsuite == 'upgrade-test'
+      run: |
+        echo "TESTSUITE=system-test" >> $GITHUB_ENV
+        # Get version-specific skip list
+        . .ci/linux-util.sh
+        SKIP_LIST=$(ovn_upgrade_get_skip_list "${{ matrix.cfg.base_version }}")
+        if [ -n "$SKIP_LIST" ]; then
+          echo "Skipping tests for ${{ matrix.cfg.base_version }}: $SKIP_LIST"
+          TEST_RANGE=$(ovn_upgrade_adjust_test_range "$TEST_RANGE" "$SKIP_LIST")
+        fi
+
+    # Regular build steps
     - name: build
-      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') }}
+      if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') || (matrix.cfg.testsuite == 'upgrade-test') }}
       run: sudo -E ./.ci/ci.sh --archive-logs --timeout=2h
 
     - name: build
-      if: ${{ !startsWith(matrix.cfg.testsuite, 'system-test') }}
+      if: ${{ !startsWith(matrix.cfg.testsuite, 'system-test') && matrix.cfg.testsuite != 'upgrade-test' }}
       run: ./.ci/ci.sh --archive-logs --timeout=2h
+
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: build-logs/
 
     - name: upload logs on failure
       if: failure() || cancelled()
