@@ -1,7 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -x
+# Enable debug output for CI, optional for local
+if [ "${DEBUG:-1}" = "1" ]; then
+    set -x
+fi
 
 ARCH=${ARCH:-"x86_64"}
 USE_SPARSE=${USE_SPARSE:-"yes"}
@@ -198,6 +201,74 @@ function execute_system_tests()
     fi
 }
 
+function execute_upgrade_tests()
+{
+    . .ci/linux-util.sh
+
+    local stable_rc=0
+
+    # Save current CI scripts (will be replaced by base version after checkout)
+    cp -rf .ci /tmp/ovn-upgrade-ci
+        
+    # Build current version
+    log "Building current version..."
+    mkdir -p logs
+    configure_ovn $OPTS >> logs/build-current.log 2>&1 || { log "configure ovn failed - see config.log and logs/build-current.log"; exit 1; }
+    make $JOBS >> logs/build-current.log 2>&1 || { log "building ovn failed - see logs/build-base.log"; exit 1; }
+
+    ovn_upgrade_save_current_binaries
+    
+    # Checkout base version
+    ovn_upgrade_checkout_base "$BASE_VERSION" logs/git.log
+    
+    # Clean from current version
+    log "Cleaning build artifacts..."
+    make distclean >> logs/build-base.log 2>&1 || true
+    (cd ovs && make distclean >> ../logs/build-base.log 2>&1) || true
+
+    # Apply test patches
+    ovn_upgrade_apply_tests_patches
+    
+    # Build base with patches
+    ovn_upgrade_patch_for_ovn_debug
+
+    # Build (modified) base version
+    log "Building base version (with patched lflow.h)..."
+    configure_ovn $OPTS >> logs/build-base.log 2>&1 || { log "configure ovn failed - see config.log and logs/build-base.log"; exit 1; }
+    make $JOBS >> logs/build-base.log 2>&1 || { log "building ovn failed - see logs/build-base.log"; exit 1; }
+    ovn_upgrade_save_ovn_debug
+
+    # Build (clean) base version
+    log "Rebuilding base version (clean lflow.h)..."
+    git checkout controller/lflow.h >> logs/git.log 2>&1
+    make $JOBS >> logs/build-base.log 2>&1 || { log "building ovn failed - see logs/build-base.log"; exit 1; }
+    
+    # Restore binaries
+    ovn_upgrade_restore_binaries
+
+    # Restore current CI scripts for test execution
+    cp -f /tmp/ovn-upgrade-ci/linux-build.sh .ci/linux-build.sh
+    cp -f /tmp/ovn-upgrade-ci/linux-util.sh .ci/linux-util.sh
+
+    SKIP_LIST=$(ovn_upgrade_get_skip_list "$BASE_VERSION")
+    if [ -n "$SKIP_LIST" ]; then
+        echo "Skipping tests for $BASE_VERSION: $SKIP_LIST"
+        if ! TEST_RANGE=$(ovn_upgrade_adjust_test_range "$TEST_RANGE" "$SKIP_LIST"); then
+            exit 1
+        fi
+    fi
+
+    if ! sudo timeout -k 5m -v $TIMEOUT make check-kernel \
+        TESTSUITEFLAGS="$TEST_RANGE" RECHECK=$RECHECK; then
+        log "Test failed: see tests/system-kmod-testsuite.log"
+        stable_rc=1
+    fi
+
+    if [[ $stable_rc -ne 0 ]]; then
+        exit 1
+    fi
+}
+
 configure_$CC
 
 if [ "$TESTSUITE" ]; then
@@ -224,6 +295,11 @@ if [ "$TESTSUITE" ]; then
         sudo bash -c "echo 2048 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
         execute_system_tests "check-system-dpdk" "system-dpdk-testsuite.log"
         ;;
+
+        "upgrade-test")
+        execute_upgrade_tests
+        ;;
+
     esac
 else
     configure_ovn $OPTS
