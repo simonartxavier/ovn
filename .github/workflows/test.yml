@@ -130,6 +130,12 @@ jobs:
         - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "-100", run_on: schedule }
         - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "101-200", run_on: schedule }
         - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "201-", unstable: unstable, run_on: schedule }
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "-100"}
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "101-200"}
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-24.09, test_range: "201-", unstable: unstable}
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "-100", run_on}
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "101-200", run_on}
+        - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.03, test_range: "201-", unstable: unstable}
         - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.09, test_range: "-100" }
         - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.09, test_range: "101-200" }
         - { compiler: gcc, testsuite: upgrade-test, base_version: branch-25.09, test_range: "201-", unstable: unstable }
