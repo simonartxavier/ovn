@@ -1,0 +1,187 @@
+name: OVN Upgrade Tests
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Run Sunday at midnight
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-container:
+    env:
+      DEPENDENCIES: podman
+    name: Prepare container
+    if: github.repository_owner == 'ovn-org' || github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update APT cache
+        run: sudo apt update
+
+      - name: Install dependencies
+        run: sudo apt install -y ${{ env.DEPENDENCIES }}
+
+      - name: Fix /etc/hosts file
+        run: |
+          . .ci/linux-util.sh
+          fix_etc_hosts
+
+      - name: Disable apparmor
+        run: |
+          . .ci/linux-util.sh
+          disable_apparmor
+
+      - name: Choose image distro
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: |
+          echo "IMAGE_DISTRO=ubuntu" >> $GITHUB_ENV
+
+      - name: Choose image distro
+        if: github.event_name == 'schedule'
+        run: |
+          echo "IMAGE_DISTRO=fedora" >> $GITHUB_ENV
+
+      - name: Build container
+        if: github.ref_name != 'main'
+        run: make ${{ env.IMAGE_DISTRO }}
+        working-directory: utilities/containers
+
+      - name: Download container
+        if: github.ref_name == 'main'
+        run: podman pull ghcr.io/ovn-org/ovn-tests:${{ env.IMAGE_DISTRO }}
+
+      - name: Tag image
+        run: podman tag ovn-org/ovn-tests:${{ env.IMAGE_DISTRO }} ovn-org/ovn-tests
+
+      - name: Export image
+        run: podman save -o /tmp/image.tar --format oci-archive ovn-org/ovn-tests
+
+      - name: Cache image
+        id: image_cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/image.tar
+          key: ${{ github.sha }}/${{ github.event_name }}
+
+  # Job to have a different matrix pull/push (LTS and latest) and on schedule (all supported branches)
+  setup:
+    runs-on: ubuntu-24.04
+    steps:
+      - id: define-matrix
+        run: |
+          matrix='[
+            {"base_version": "origin/branch-24.03", "test_range": "-100"},
+            {"base_version": "origin/branch-24.03", "test_range": "101-", "unstable": "unstable"},
+            {"base_version": "origin/branch-25.09", "test_range": "-100"},
+            {"base_version": "origin/branch-25.09", "test_range": "101-200"},
+            {"base_version": "origin/branch-25.09", "test_range": "201-", "unstable": "unstable"}
+          ']
+
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            matrix=$(echo "$matrix" | jq -c '. += [
+              {"base_version": "origin/branch-24.09", "test_range": "-100"},
+              {"base_version": "origin/branch-24.09", "test_range": "101-200"},
+              {"base_version": "origin/branch-24.09", "test_range": "201-", "unstable": "unstable"},
+              {"base_version": "origin/branch-25.03", "test_range": "-100"},
+              {"base_version": "origin/branch-25.03", "test_range": "101-200"},
+              {"base_version": "origin/branch-25.03", "test_range": "201-", "unstable": "unstable"}
+            ]')
+          fi
+          # Also add a 'name' as artifact names cannot contain '/'.
+          echo "matrix=$(echo "$matrix" | jq -c 'map(. + {name: (.base_version | split("/") | last)})')" >> $GITHUB_OUTPUT
+    outputs:
+      matrix: ${{ steps.define-matrix.outputs.matrix }}
+
+  upgrade-tests:
+    needs: [setup, prepare-container]
+    name: upgrade-test ${{ matrix.cfg.name }} ${{ matrix.cfg.test_range }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    env:
+      CC: gcc
+      BASE_VERSION: ${{ matrix.cfg.base_version }}
+      TEST_RANGE: ${{ matrix.cfg.test_range }}
+      UNSTABLE: ${{ matrix.cfg.unstable }}
+      TESTSUITE: "upgrade-test"
+
+    steps:
+    - name: system-level-dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install linux-modules-extra-$(uname -r)
+
+    - name: checkout
+      if: github.event_name == 'push' || github.event_name == 'pull_request'
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    # For weekly runs, don't update submodules
+    - name: checkout without submodule
+      if: github.event_name == 'schedule'
+      uses: actions/checkout@v4
+
+    # Weekly runs test using the tip of the most recent stable OVS branch
+    # instead of the submodule.
+    - name: checkout OVS
+      if: github.event_name == 'schedule'
+      uses: actions/checkout@v4
+      with:
+        repository: 'openvswitch/ovs'
+        fetch-depth: 0
+        path: 'ovs'
+
+    - name: checkout OVS most recent stable branch.
+      if: github.event_name == 'schedule'
+      run: |
+        git checkout \
+          $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
+            sort -V | tail -1)
+      working-directory: ovs
+
+    - name: Fix /etc/hosts file
+      run: |
+        . .ci/linux-util.sh
+        fix_etc_hosts
+
+    - name: Disable apparmor
+      run: |
+        . .ci/linux-util.sh
+        disable_apparmor
+
+    - name: image cache
+      id: image_cache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/image.tar
+        key: ${{ github.sha }}/${{ github.event_name }}
+
+    - name: load image
+      run: |
+        sudo podman load -i /tmp/image.tar
+        podman load -i /tmp/image.tar
+        rm -rf /tmp/image.tar
+
+    - name: build
+      run: sudo -E ./.ci/ci.sh --archive-logs --timeout=2h
+
+    - name: upload logs on failure
+      if: failure() || cancelled()
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-upgrade-test-${{ matrix.cfg.name }}-${{ matrix.cfg.test_range }}
+        path: logs.tgz
