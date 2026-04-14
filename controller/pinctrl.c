@@ -5746,6 +5746,10 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
     SBREC_IP_MULTICAST_FOR_EACH_BYINDEX (ip_mcast, sbrec_ip_multicast) {
 
         int64_t dp_key = ip_mcast->datapath->tunnel_key;
+
+        if (!get_local_datapath(local_datapaths, dp_key)) {
+            continue;
+        }
         struct ip_mcast_snoop_cfg cfg;
         bool flush_groups = false;
 
