@@ -565,7 +565,7 @@ garp_rarp_get_data(void)
 bool
 garp_rarp_data_changed(void) {
     bool ret = garp_rarp_data_has_changed;
-    garp_rarp_data_has_changed = true;
+    garp_rarp_data_has_changed = false;
     return ret;
 }
 
