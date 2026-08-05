@@ -3586,6 +3586,7 @@ en_mac_cache_cleanup(void *data)
 
 struct ed_type_bfd_chassis {
     struct sset bfd_chassis;
+    int is_ha_gw; /* -1 = uninitialized, 0 = false, 1 = true */
 };
 
 static void *
@@ -3594,6 +3595,7 @@ en_bfd_chassis_init(struct engine_node *node OVS_UNUSED,
 {
     struct ed_type_bfd_chassis *data = xzalloc(sizeof *data);
     sset_init(&data->bfd_chassis);
+    data->is_ha_gw = -1;
     return data;
 }
 
@@ -3614,8 +3616,9 @@ en_bfd_chassis_run(struct engine_node *node, void *data OVS_UNUSED)
         = chassis_lookup_by_name(sbrec_chassis_by_name, chassis_id);
 
     sset_clear(&bfd_chassis->bfd_chassis);
-    bfd_calculate_chassis(chassis, ha_chassis_grp_table,
-                          &bfd_chassis->bfd_chassis);
+    bfd_chassis->is_ha_gw = bfd_calculate_chassis(chassis,
+                                                  ha_chassis_grp_table,
+                                                  &bfd_chassis->bfd_chassis);
     return EN_UPDATED;
 }
 
@@ -8369,13 +8372,23 @@ main(int argc, char *argv[])
                 const struct sbrec_sb_global *sbg =
                     sbrec_sb_global_first(ovnsb_idl_loop.idl);
                 if (chassis && sbg && ovs_feature_set_discovered()) {
+                    bool is_ha_chassis_member;
+                    if (bfd_chassis_data && bfd_chassis_data->is_ha_gw != -1) {
+                        is_ha_chassis_member = bfd_chassis_data->is_ha_gw;
+                    } else {
+                        is_ha_chassis_member = bfd_calculate_chassis(
+                            chassis, sbrec_ha_chassis_group_table_get(
+                                ovnsb_idl_loop.idl),
+                            NULL);
+                    }
                     encaps_run(ovs_idl_txn, ovnsb_idl_txn, br_int,
                                sbrec_chassis_table_get(ovnsb_idl_loop.idl),
                                chassis,
                                sbg,
                                ovs_table,
                                &transport_zones,
-                               bridge_table);
+                               bridge_table,
+                               is_ha_chassis_member);
 
                     ovn_netlink_notifiers_run();
 

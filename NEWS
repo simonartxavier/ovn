@@ -99,6 +99,11 @@ Post v26.03.0
      egress pipelines.
    - The support for co-hosting multiple controller instances is now
      considered stable.  Its "experimental" tag has been removed.
+   - Mark tunnel ports as transient (other_config:transient=true) when the
+     local chassis is a member of an HA chassis group.
+     OVS removes transient ports on ovsdb-server restart, preventing stale
+     tunnel ports from interfering with BFD and HA failover after a gateway
+     chassis reboots.
 
 OVN v26.03.0 - xxx xx xxxx
 --------------------------
