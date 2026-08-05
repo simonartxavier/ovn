@@ -1043,6 +1043,33 @@ ctrl_register_ovs_idl(struct ovsdb_idl *ovs_idl)
      * track that column which should be addressed in the future. */
 }
 
+static bool
+chassis_is_ha_member(const struct sbrec_chassis *chassis,
+                     const struct sbrec_ha_chassis_group_table *ha_grp_table)
+{
+    static bool is_ha_member = false;
+    const struct sbrec_ha_chassis_group *grp;
+
+    if (!sbrec_ha_chassis_group_table_track_get_first(ha_grp_table)) {
+        return is_ha_member;
+    }
+
+    SBREC_HA_CHASSIS_GROUP_TABLE_FOR_EACH (grp, ha_grp_table) {
+        /* If there is only one member, then it is not HA */
+        if (grp->n_ha_chassis < 2) {
+            continue;
+        }
+        for (size_t i = 0; i < grp->n_ha_chassis; i++) {
+            if (grp->ha_chassis[i]->chassis == chassis) {
+                is_ha_member = true;
+                return true;
+            }
+        }
+    }
+    is_ha_member = false;
+    return false;
+}
+
 struct ed_type_ofctrl_is_connected {
     bool connected;
 };
@@ -8034,13 +8061,17 @@ main(int argc, char *argv[])
                 const struct sbrec_sb_global *sbg =
                     sbrec_sb_global_first(ovnsb_idl_loop.idl);
                 if (chassis && sbg && ovs_feature_set_discovered()) {
+                    bool is_ha_chassis_member = chassis_is_ha_member(
+                        chassis,
+                        sbrec_ha_chassis_group_table_get(ovnsb_idl_loop.idl));
                     encaps_run(ovs_idl_txn, ovnsb_idl_txn, br_int,
                                sbrec_chassis_table_get(ovnsb_idl_loop.idl),
                                chassis,
                                sbg,
                                ovs_table,
                                &transport_zones,
-                               bridge_table);
+                               bridge_table,
+                               is_ha_chassis_member);
 
                     ovn_netlink_notifiers_run();
 

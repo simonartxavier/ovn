@@ -94,6 +94,12 @@ Post v26.03.0
    - Added a new "ovn-debug lflow-pipeline-oftable-start-list" command that
      prints the starting OpenFlow table number of the logical ingress and
      egress pipelines.
+   - Marks tunnel ports as transient (other_config:transient=true) when the
+     local chassis is a member of an HA chassis group.
+     OVS removes transient ports on ovsdb-server restart, preventing stale
+     tunnel ports from interfering with BFD and HA failover after a gateway
+     chassis reboots.
+
 
 OVN v26.03.0 - xxx xx xxxx
 --------------------------
