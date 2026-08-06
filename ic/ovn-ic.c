@@ -2142,6 +2142,20 @@ add_network_to_routes_ad(struct hmap *routes_ad, const char *network,
         return;
     }
 
+    if (in6_is_lla(&nexthop)) {
+        if (VLOG_IS_DBG_ENABLED()) {
+            struct ds msg = DS_EMPTY_INITIALIZER;
+            ds_put_format(&msg, "Route ad: skip lla nexthop");
+            if (nb_lrp) {
+                ds_put_format(&msg, " of lrp %s", nb_lrp->name);
+            }
+            ds_put_format(&msg, ".");
+            VLOG_DBG("%s", ds_cstr(&msg));
+            ds_destroy(&msg);
+        }
+        return;
+    }
+
     if (VLOG_IS_DBG_ENABLED()) {
         struct ds msg = DS_EMPTY_INITIALIZER;
 
