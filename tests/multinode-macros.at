@@ -82,6 +82,11 @@ m4_define([M_FORMAT_CT],
 m4_define([M_FORMAT_CURL],
     [[sed 's/\(.*\)Connected to $1 ($1) port $2/Connected to $1 ($1) port $2\n/' | sed 's/\(.*\)200 OK/200 OK\n/' | grep -i -e connected -e "200 OK" | uniq ]])
 
+# OVN_CURL([CURL_ARGS])
+#
+# Execute curl with version-agnostic -w output formatting.
+m4_define([OVN_CURL], [curl -s -S -o /dev/null -w "Connected to %{url.host} (%{remote_ip}) port %{remote_port}\n%{http_code} OK\n" $1])
+
 # CHECK_VRF()
 #
 # Perform a requirements check for running VRF tests.
