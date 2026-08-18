@@ -53,6 +53,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        sudo sed -i '/azure/d' /etc/apt/apt-mirrors.txt
         sudo apt update || true
         sudo apt-get install -y podman
 
@@ -124,6 +125,7 @@ jobs:
 
     - name: install required dependencies
       run:  |
+        sudo sed -i '/azure/d' /etc/apt/apt-mirrors.txt
         sudo apt update || true
         sudo apt install -y ${{ env.dependencies }}
         sudo apt install -y linux-modules-extra-$(uname -r)
