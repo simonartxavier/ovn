@@ -61,4 +61,5 @@ function fixup_crun()
         -o /usr/bin/crun
     sudo chmod +x /usr/bin/crun
     echo "New crun version: "$(crun --version)
+    sudo rm -f /usr/local/bin/podman /usr/local/bin/crun /usr/local/lib/podman/conmon
 }
