@@ -138,10 +138,11 @@ jobs:
         . .ci/linux-util.sh
         disable_apparmor
 
-    - name: Fixup crun
+    - name: Fixup crun and podman
       run: |
         . .ci/linux-util.sh
         fixup_crun
+        fixup_podman
 
     - name: Free up disk space
       run: |

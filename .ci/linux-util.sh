@@ -62,3 +62,13 @@ function fixup_crun()
     sudo chmod +x /usr/bin/crun
     echo "New crun version: "$(crun --version)
 }
+
+# XXX This should also be removed when latest podman works.
+function fixup_podman()
+{
+    which podman
+    echo "/usr/local/bin/podman version: $(/usr/local/bin/podman --version 2> /dev/null)"
+    echo "/usr/bin/podman version: $(/usr/bin/podman --version 2> /dev/null)"
+    sudo rm -f /usr/local/bin/podman /usr/local/bin/crun /usr/local/lib/podman/conmon
+    which podman
+}
