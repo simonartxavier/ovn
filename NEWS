@@ -7,6 +7,12 @@ OVN v25.03.4 - xx xxx xxxx
      Advertisements.
    - Allow FDB learning on logical switch ports that have both
      port_security and "unknown" addresses configured.
+   - Mark tunnel ports as transient (other_config:transient=true) when the
+     local chassis is a member of an HA chassis group.
+     Systems which invoke ovs-ctl --delete-transient-ports during OVS startup
+     (e.g. via the ovs-delete-transient-ports.service on RHEL/Fedora) will
+     automatically remove stale tunnel ports on reboot, preventing them from
+     interfering with BFD and HA failover after a gateway chassis reboot.
 
 OVN v25.03.3 - 20 Apr 2026
 --------------------------
