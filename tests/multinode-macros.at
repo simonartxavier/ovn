@@ -74,13 +74,12 @@ m4_define([M_START_TCPDUMPS],
 m4_define([M_FORMAT_CT],
     [[grep -F "dst=$1," | sed -e 's/id=[0-9]*/id=<cleared>/g' -e 's/state=[0-9_A-Z]*/state=<cleared>/g' | sort | uniq | sed -e 's/zone=[[0-9]]*/zone=<cleared>/' -e 's/mark=[[0-9]]*/mark=<cleared>/' ]])
 
-# M_FORMAT_CURL([ip-addr], [port])
+# OVN_CURL([CURL_ARGS])
 #
-# Strip content from the piped input which would differ from test to test
-# and limit the output to the rows containing 'ip-addr' and 'port'.
-#
-m4_define([M_FORMAT_CURL],
-    [[sed 's/\(.*\)Connected to $1 ($1) port $2/Connected to $1 ($1) port $2\n/' | sed 's/\(.*\)200 OK/200 OK\n/' | grep -i -e connected -e "200 OK" | uniq ]])
+# Execute curl with version-agnostic -w output formatting.
+# On unsuccessful connections, curl.out also contains "Connected to () port -1" and the http
+# code (e.g. 000) from the -w format, but those are harmless as failure detection uses grep.
+m4_define([OVN_CURL], [curl -s -S -o /dev/null -w "Connected to %{remote_ip} (%{remote_ip}) port %{remote_port}\n%{http_code}\n" $1 2>&1 | sed "s/^200$/200 OK/"])
 
 # CHECK_VRF()
 #
