@@ -5275,6 +5275,9 @@ check multinode_nbctl lrp-set-gateway-chassis ro-public ovn-gw-1
 check multinode_nbctl lrp-set-redirect-type ro-public bridged
 
 m_as ovn-gw-1 ovs-vsctl set open . external-ids:ovn-bridge-mappings=public:br-ex
+
+on_exit 'm_as ovn-chassis-1 ovs-vsctl remove open . external-ids ovn-chassis-mac-mappings'
+on_exit 'm_as ovn-gw-1 ovs-vsctl remove open . external-ids ovn-chassis-mac-mappings'
 m_as ovn-chassis-1 ovs-vsctl set open . external-ids:ovn-chassis-mac-mappings="public:aa:bb:cc:dd:01:01"
 m_as ovn-gw-1 ovs-vsctl set open . external-ids:ovn-chassis-mac-mappings="public:aa:bb:cc:dd:02:01"
 
