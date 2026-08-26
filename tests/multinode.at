@@ -4041,29 +4041,29 @@ check m_as ovn-gw-2 ip netns exec frr-ns ip addr add dev br-10 10.0.0.82/24
 check m_as ovn-gw-2 ip netns exec frr-ns ip -6 addr add dev br-10 10::82/64 nodad
 
 AS_BOX([Checking EVPN MACs and IPs on External BGP host])
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 2
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:00:01 remote       42.42.10.12                          0/0
-00:00:00:00:01:00 local        evpn_host_peer                       0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:00:01 remote 42.42.10.12 0/0
+00:00:00:00:01:00 local evpn_host_peer 0/0
 ])
 
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 2
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:00:02 remote       42.42.10.22                          0/0
-00:00:00:00:02:00 local        evpn_host_peer                       0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:00:02 remote 42.42.10.22 0/0
+00:00:00:00:02:00 local evpn_host_peer 0/0
 ])
 
 # Check that the fabric learned both FDB and IP routes for the workloads.
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show bgp l2vpn evpn route' | \
-    grep --no-group-separator -A1 00:00:00:00:00:01], [0], [dnl
+    grep --no-group-separator -A1 00:00:00:00:00:01 | sed 's/ RD [[0-9.:]]*//g'], [0], [dnl
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:01]]
                     42.42.10.12                            0 4210000000 i
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:01]]:[[32]]:[[10.0.0.11]]
@@ -4072,7 +4072,7 @@ OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/
                     42.42.10.12                            0 4210000000 i
 ])
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show bgp l2vpn evpn route' | \
-    grep --no-group-separator -A1 00:00:00:00:00:02], [0], [dnl
+    grep --no-group-separator -A1 00:00:00:00:00:02 | sed 's/ RD [[0-9.:]]*//g'], [0], [dnl
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:02]]
                     42.42.10.22                            0 4210000000 i
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:02]]:[[32]]:[[10.0.0.12]]
@@ -4194,22 +4194,22 @@ OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ovs-ofctl dump-flows br-int table=OFTABLE_GET
 check multinode_nbctl --wait=hv lsp-del w1 -- lsp-del w2
 
 AS_BOX([Checking EVPN MACs on External BGP host])
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 1
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:01:00 local        evpn_host_peer                       0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:01:00 local evpn_host_peer 0/0
 ])
 
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 1
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:02:00 local        evpn_host_peer                       0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:02:00 local evpn_host_peer 0/0
 ])
 
 # Check that the fabric un-learned both FDB and IP routes for the workloads.
@@ -4418,43 +4418,43 @@ check m_as ovn-gw-2 ip netns exec frr-ns ip -6 addr add dev br-10 10::82/64 noda
 check m_as ovn-gw-2 ip netns exec frr-ns ip -6 addr add dev br-20 11::82/64 nodad
 
 AS_BOX([Checking EVPN MACs and IPs on External BGP host])
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 2
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:00:01 remote       42.42.10.12                          0/0
-00:00:00:00:01:00 local        evpn_host_peer0                      0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:00:01 remote 42.42.10.12 0/0
+00:00:00:00:01:00 local evpn_host_peer0 0/0
 
 VNI 20 #MACs (local and remote) 2
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:11:00 local        evpn_host_peer1                      0/0
-00:00:00:00:00:11 remote       42.42.10.12                          0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:11:00 local evpn_host_peer1 0/0
+00:00:00:00:00:11 remote 42.42.10.12 0/0
 ])
 
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 2
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:00:02 remote       42.42.10.22                          0/0
-00:00:00:00:02:00 local        evpn_host_peer0                      0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:00:02 remote 42.42.10.22 0/0
+00:00:00:00:02:00 local evpn_host_peer0 0/0
 
 VNI 20 #MACs (local and remote) 2
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:12:00 local        evpn_host_peer1                      0/0
-00:00:00:00:00:12 remote       42.42.10.22                          0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:12:00 local evpn_host_peer1 0/0
+00:00:00:00:00:12 remote 42.42.10.22 0/0
 ])
 
 # Check that the fabric learned both FDB and IP routes for the workloads.
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show bgp l2vpn evpn route' | \
-    grep --no-group-separator -A1 00:00:00:00:00:01], [0], [dnl
+    grep --no-group-separator -A1 00:00:00:00:00:01 | sed 's/ RD [[0-9.:]]*//g'], [0], [dnl
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:01]]
                     42.42.10.12                            0 4210000000 i
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:01]]:[[32]]:[[10.0.0.11]]
@@ -4463,7 +4463,7 @@ OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/
                     42.42.10.12                            0 4210000000 i
 ])
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show bgp l2vpn evpn route' | \
-    grep --no-group-separator -A1 00:00:00:00:00:11], [0], [dnl
+    grep --no-group-separator -A1 00:00:00:00:00:11 | sed 's/ RD [[0-9.:]]*//g'], [0], [dnl
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:11]]
                     42.42.10.12                            0 4210000000 i
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:11]]:[[32]]:[[11.0.0.11]]
@@ -4472,7 +4472,7 @@ OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/
                     42.42.10.12                            0 4210000000 i
 ])
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show bgp l2vpn evpn route' | \
-    grep --no-group-separator -A1 00:00:00:00:00:02], [0], [dnl
+    grep --no-group-separator -A1 00:00:00:00:00:02 | sed 's/ RD [[0-9.:]]*//g'], [0], [dnl
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:02]]
                     42.42.10.22                            0 4210000000 i
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:02]]:[[32]]:[[10.0.0.12]]
@@ -4481,7 +4481,7 @@ OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/
                     42.42.10.22                            0 4210000000 i
 ])
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show bgp l2vpn evpn route' | \
-    grep --no-group-separator -A1 00:00:00:00:00:12], [0], [dnl
+    grep --no-group-separator -A1 00:00:00:00:00:12 | sed 's/ RD [[0-9.:]]*//g'], [0], [dnl
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:12]]
                     42.42.10.22                            0 4210000000 i
  *>  [[2]]:[[0]]:[[48]]:[[00:00:00:00:00:12]]:[[32]]:[[11.0.0.12]]
@@ -4605,34 +4605,34 @@ OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ovs-ofctl dump-flows br-int table=OFTABLE_GET
 check multinode_nbctl --wait=hv lsp-del w01 -- lsp-del w02 -- lsp-del w11 -- lsp-del w12
 
 AS_BOX([Checking EVPN MACs on External BGP host])
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 1
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:01:00 local        evpn_host_peer0                      0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:01:00 local evpn_host_peer0 0/0
 
 VNI 20 #MACs (local and remote) 1
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:11:00 local        evpn_host_peer1                      0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:11:00 local evpn_host_peer1 0/0
 ])
 
-OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
+OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all' | tr -s ' '], [0], [dnl
 
 VNI 10 #MACs (local and remote) 1
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:02:00 local        evpn_host_peer0                      0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:02:00 local evpn_host_peer0 0/0
 
 VNI 20 #MACs (local and remote) 1
 
 Flags: N=sync-neighs, I=local-inactive, P=peer-active, X=peer-proxy
-MAC               Type   Flags Intf/Remote ES/VTEP            VLAN  Seq #'s
-00:00:00:00:12:00 local        evpn_host_peer1                      0/0
+MAC Type Flags Intf/Remote ES/VTEP VLAN Seq #'s
+00:00:00:00:12:00 local evpn_host_peer1 0/0
 ])
 
 # Check that the fabric un-learned both FDB and IP routes for the workloads.
