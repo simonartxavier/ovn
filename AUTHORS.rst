@@ -289,6 +289,7 @@ Markos Chandras                    mchandras@suse.de
 Martin Casado                      casado@cs.stanford.edu
 Martin Fong                        mwfong@csl.sri.com
 Martin Kalcok                      martin.kalcok@gmail.com
+Martin Morgenstern                 martin.morgenstern@cloudandheat.com
 Martin Xu                          martinxu9.ovs@gmail.com
 Martino Fornasa                    mf@fornasa.it
 Maryam Tahhan                      maryam.tahhan@intel.com
