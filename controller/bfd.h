@@ -32,10 +32,14 @@ void bfd_register_ovs_idl(struct ovsdb_idl *);
 void bfd_run(const struct ovsrec_interface_table *,
              const struct ovsrec_bridge *,
              const struct sbrec_chassis *,
-             const struct sbrec_ha_chassis_group_table *,
+             const struct sset *bfd_chassis,
              const struct sbrec_sb_global_table *);
 
 void  bfd_calculate_active_tunnels(const struct ovsrec_bridge *br_int,
                                    struct sset *active_tunnels);
+void bfd_calculate_chassis(
+    const struct sbrec_chassis *our_chassis,
+    const struct sbrec_ha_chassis_group_table *ha_chassis_grp_table,
+    struct sset *bfd_chassis);
 
 #endif

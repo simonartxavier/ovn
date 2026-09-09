@@ -5950,13 +5950,21 @@ main(int argc, char *argv[])
                 const struct sbrec_sb_global *sbg =
                     sbrec_sb_global_first(ovnsb_idl_loop.idl);
                 if (chassis && sbg && ovs_feature_set_discovered()) {
+                    struct sset bfd_chassis = SSET_INITIALIZER(&bfd_chassis);
+                    bfd_calculate_chassis(
+                         chassis, sbrec_ha_chassis_group_table_get(
+                              ovnsb_idl_loop.idl),
+                         &bfd_chassis);
+                    bool is_ha_chassis_member = sset_contains(
+                        &bfd_chassis, chassis->name);
                     encaps_run(ovs_idl_txn, ovnsb_idl_txn, br_int,
                                sbrec_chassis_table_get(ovnsb_idl_loop.idl),
                                chassis,
                                sbg,
                                ovs_table,
                                &transport_zones,
-                               bridge_table);
+                               bridge_table,
+                               is_ha_chassis_member);
 
                     stopwatch_start(CONTROLLER_LOOP_STOPWATCH_NAME,
                                     time_msec());
@@ -6004,12 +6012,11 @@ main(int argc, char *argv[])
                         }
                         stopwatch_start(BFD_RUN_STOPWATCH_NAME, time_msec());
                         bfd_run(ovsrec_interface_table_get(ovs_idl_loop.idl),
-                                br_int, chassis,
-                                sbrec_ha_chassis_group_table_get(
-                                    ovnsb_idl_loop.idl),
+                                br_int, chassis, &bfd_chassis,
                                 sbrec_sb_global_table_get(ovnsb_idl_loop.idl));
                         stopwatch_stop(BFD_RUN_STOPWATCH_NAME, time_msec());
                     }
+                    sset_destroy(&bfd_chassis);
 
                     runtime_data = engine_get_data(&en_runtime_data);
                     if (runtime_data) {
