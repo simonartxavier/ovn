@@ -41168,5 +41168,6 @@ check ovn-nbctl set Logical_Router lr1 options:disable_garp_rarp="false"
 check ovn-nbctl --wait=hv sync
 OVN_CHECK_PACKETS_UNIQ([hv1/snoopvif-tx.pcap], [expected])
 
+
 AT_CLEANUP
 ])
