@@ -45,7 +45,13 @@ m4_define([M_START_TCPDUMPS_RECURSIVE_], [
      m4_if(m4_eval($# >= 3), [1], [dnl
         names="$names $3"
         echo "Running podman exec $1 tcpdump -l $2 >$3.tcpdump 2>$3.stderr"
-        podman exec $1 tcpdump -l $2 >$3.tcpdump 2>$3.stderr &
+        (
+            podman exec $1 tcpdump -l $2 >$3.tcpdump 2>$3.stderr || {
+                rc=$?
+                echo "$(date +%H:%M:%S.%03N) podman exec for $1 failed with rc=$rc"
+                podman exec "$1" ip link show 2>&1
+            }
+        ) &
         echo "podman exec $1 ps -ef | grep -v grep | grep tcpdump && podman exec $1 killall tcpdump" >> cleanup
         M_START_TCPDUMPS_RECURSIVE_(m4_shift(m4_shift(m4_shift($@))))
         ])

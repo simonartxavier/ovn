@@ -3758,6 +3758,7 @@ check_migration_between_gw1_and_gw2_reboot_gw1() {
     max_expected_loss2=$2
     prepare
 
+    m_kill 'ovn-gw-1' tcpdump
     podman stop -t 0 ovn-gw-1
     (exec 3>&- 4>&- 5>&- 6>&-; podman start ovn-gw-1)
 
