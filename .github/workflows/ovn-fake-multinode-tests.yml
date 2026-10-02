@@ -188,7 +188,7 @@ jobs:
       with:
         repository: 'ovn-org/ovn-fake-multinode'
         path: 'ovn-fake-multinode'
-        ref: 'v0.4'
+        ref: 'v0.7'
 
     - name: Start openvswitch
       run: |
