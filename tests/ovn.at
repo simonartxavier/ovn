@@ -47565,6 +47565,7 @@ check ovs-vsctl -- add-port br-int hv1-vif1 -- \
     options:tx_pcap=hv1/vif1-tx.pcap \
     options:rxq_pcap=hv1/vif1-rx.pcap
 
+check ovn-nbctl --wait=sb sync
 check ovn-sbctl lsp-bind sw-ext hv1
 
 wait_for_ports_up
@@ -47581,6 +47582,7 @@ packet=$(fmt_pkt \
     "Ether(dst='aa:bb:cc:dd:ee:ff', src='50:54:00:00:00:01') / \
      IP(src='10.0.0.1', dst='10.0.0.99') / \
      UDP(sport=1234, dport=5678) / Raw(b'test')")
+as hv1 ovn-appctl vlog/set dbg
 check as hv1 ovs-appctl netdev-dummy/receive br-phys_n1 $packet
 
 # MLDv2 report.  Simulates a baremetal node sending an MLD report

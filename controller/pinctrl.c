@@ -5857,9 +5857,11 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
               struct ovsdb_idl_index *sbrec_ip_multicast)
     OVS_REQUIRES(pinctrl_mutex)
 {
+    VLOG_INFO("XSXS ip_mcast_sync");
     bool notify = false;
 
     if (!ovnsb_idl_txn || !chassis) {
+        VLOG_INFO("XSXS !ovnsb_idl_txn || !chassis");
         return;
     }
 
@@ -5906,17 +5908,20 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
         struct in6_addr group_addr;
 
         if (!sbrec_igmp->datapath) {
+            VLOG_INFO("XSXS1");
             continue;
         }
 
         /* Skip non-local records. */
         if (sbrec_igmp->chassis != chassis) {
+            VLOG_INFO("XSXS2");
             continue;
         }
 
         /* Skip non-local datapaths. */
         int64_t dp_key = sbrec_igmp->datapath->tunnel_key;
         if (!get_local_datapath(local_datapaths, dp_key)) {
+            VLOG_INFO("XSXS3");
             continue;
         }
 
@@ -5927,12 +5932,15 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
          */
         if (!ip_ms || !ip_ms->cfg.enabled) {
             igmp_group_delete(sbrec_igmp);
+            VLOG_INFO("XSXS4");
             continue;
         }
 
         if (!strcmp(sbrec_igmp->address, OVN_IGMP_GROUP_MROUTERS)) {
+            VLOG_INFO("XSXS5");
             continue;
         } else if (!ip46_parse(sbrec_igmp->address, &group_addr)) {
+            VLOG_INFO("XSXS6");
             continue;
         }
 
@@ -5958,11 +5966,13 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
             get_local_datapath(local_datapaths, ip_ms->dp_key);
 
         if (!local_dp || !local_dp->is_switch) {
+            VLOG_INFO("XSXS7");
             continue;
         }
 
         /* Skip datapaths on which snooping is disabled. */
         if (!ip_ms->cfg.enabled) {
+            VLOG_INFO("XSXS8");
             continue;
         }
 
@@ -5973,16 +5983,19 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
         /* Groups. */
         LIST_FOR_EACH (mc_group, group_node, &ip_ms->ms->group_lru) {
             if (ovs_list_is_empty(&mc_group->bundle_lru)) {
+                VLOG_INFO("XSXS9");
                 continue;
             }
             sbrec_igmp = igmp_group_lookup(sbrec_igmp_groups, &mc_group->addr,
                                            local_dp->datapath, chassis);
             if (!sbrec_igmp) {
+                VLOG_INFO("XSXS10 igmp_group_create");
                 sbrec_igmp = igmp_group_create(
                     ovnsb_idl_txn, &mc_group->addr, local_dp->datapath,
                     chassis, pinctrl.igmp_group_has_chassis_name);
             }
 
+            VLOG_INFO("XSXS11 igmp_group_update");
             igmp_group_update(sbrec_igmp, sbrec_datapath_binding_by_key,
                                     sbrec_port_binding_by_key, ip_ms->ms,
                                     mc_group, pinctrl.igmp_support_protocol);
