@@ -7503,12 +7503,138 @@ AT_CAPTURE_FILE([S1flows])
 AT_CHECK([grep -e "ls_in_l2_lkup.*S1-vm1" S1flows | grep -e "match=(eth.dst == 50:54:00:00:00:01)"], [1], [])
 AT_CHECK([grep -e "ls_in_.*_fdb.*S1-vm1" S1flows | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=100  , match=(inport == "S1-vm1"), action=(reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-vm1" && arp), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = lookup_fdb(inport, arp.sha); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-vm1" && nd_na), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.tll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-vm1" && nd_ns), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.sll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-vm1" && arp.sha == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-vm1" && nd.sll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-vm1" && nd.tll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
   table=??(ls_in_put_fdb      ), priority=100  , match=(inport == "S1-vm1" && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-vm1" && arp && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, arp.sha); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-vm1" && nd_na && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.tll); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-vm1" && nd_ns && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.sll); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-vm1" && arp.sha == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-vm1" && nd.sll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-vm1" && nd.tll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
 ])
 
 #Verify the flows for a non-default port type (localnet port)
 AT_CHECK([grep -e "ls_in_.*_fdb.*S1-localnet" S1flows | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=50   , match=(inport == "S1-localnet"), action=(flags.localnet = 1; next;)
+])
+
+OVN_CLEANUP_NORTHD
+AT_CLEANUP
+])
+
+
+OVN_FOR_EACH_NORTHD_NO_HV([
+AT_SETUP([FDB learning includes ARP/ND inner MAC addresses])
+AT_KEYWORDS([ovn fdb arp nd])
+ovn_start
+
+check ovn-nbctl ls-add ls0
+check ovn-nbctl lsp-add ls0 p1
+check ovn-nbctl lsp-set-addresses p1 "fa:16:3e:00:00:01 10.0.0.1" unknown
+check ovn-nbctl --wait=sb sync
+
+ovn-sbctl dump-flows ls0 > ls0flows
+AT_CAPTURE_FILE([ls0flows])
+
+dnl Standard lookup/put flows at priority 100 for eth.src.
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows | grep "p1" | grep -q "priority=100"])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows | grep "p1" | grep -q "priority=100"])
+
+dnl ARP-specific lookup flow at priority 110 with lookup_fdb for
+dnl both eth.src and arp.sha.
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows | grep "p1" | grep "priority=110" | grep -q "arp.sha"])
+
+dnl ARP-specific put_fdb flow at priority 110 that learns both
+dnl eth.src and arp.sha, guarded by the OR of both regbits.
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows | grep "p1" | grep "priority=110" | grep "arp.sha" | grep -q "reg0\[[22\]]"])
+
+dnl ND NA lookup and put flows at priority 110 for nd.tll.
+dnl The flows must include a guard against all-zero nd.tll (no TLLAO).
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows | grep "p1" | grep "priority=120" | grep -q "nd.tll == 00:00:00:00:00:00"])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows | grep "p1" | grep "priority=120" | grep -q "nd.tll == 00:00:00:00:00:00"])
+
+dnl ND NS lookup and put flows at priority 110 for nd.sll.
+dnl The flows must include a guard against all-zero nd.sll (no SLLAO).
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows | grep "p1" | grep "priority=120" | grep -q "nd.sll == 00:00:00:00:00:00"])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows | grep "p1" | grep "priority=120" | grep -q "nd.sll == 00:00:00:00:00:00"])
+
+OVN_CLEANUP_NORTHD
+AT_CLEANUP
+])
+
+
+OVN_FOR_EACH_NORTHD_NO_HV([
+AT_SETUP([FDB learning with port security and shared VMAC])
+AT_KEYWORDS([ovn])
+ovn_start
+
+check ovn-nbctl ls-add ls0
+
+check ovn-nbctl lsp-add ls0 p1
+check ovn-nbctl lsp-add ls0 p2
+check ovn-nbctl set Logical_Switch_Port p1 \
+    'addresses=["fa:16:3e:00:00:01 10.0.0.1", "unknown"]' \
+    'port_security=["fa:16:3e:00:00:01 10.0.0.1", "VRRPv3 fa:16:3e:00:00:01 00:00:5e:00:01:33/40"]'
+check ovn-nbctl set Logical_Switch_Port p2 \
+    'addresses=["fa:16:3e:00:00:02 10.0.0.2", "unknown"]' \
+    'port_security=["fa:16:3e:00:00:02 10.0.0.2", "VRRPv3 fa:16:3e:00:00:02 00:00:5e:00:01:33/40"]'
+check ovn-nbctl --wait=sb sync
+
+ovn-sbctl dump-flows ls0 > ls0flows
+AT_CAPTURE_FILE([ls0flows])
+
+dnl Static L2 lookup flows at priority 50 for each port's primary MAC.
+AT_CHECK([grep -e "ls_in_l2_lkup" ls0flows | grep -q "eth.dst == fa:16:3e:00:00:01"])
+AT_CHECK([grep -e "ls_in_l2_lkup" ls0flows | grep -q "eth.dst == fa:16:3e:00:00:02"])
+
+dnl No static L2 lookup flow for the VMAC (it is not in addresses).
+AT_CHECK([grep -e "ls_in_l2_lkup" ls0flows | grep -c "00:00:5e:00:01:33"], [1], [0
+])
+
+dnl FDB learning flows generated for both ports despite port_security.
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows | grep -q "p1"])
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows | grep -q "p2"])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows | grep -q "p1"])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows | grep -q "p2"])
+
+dnl FDB-based L2 lookup at priority 0 is present.
+AT_CHECK([grep -e "ls_in_l2_lkup" ls0flows | grep -q "get_fdb"])
+
+dnl Port security flows still present.
+AT_CHECK([grep -e "ls_in_check_port_sec" ls0flows | grep -q "p1"])
+AT_CHECK([grep -e "ls_in_check_port_sec" ls0flows | grep -q "p2"])
+
+dnl A port without port_security + unknown still gets FDB
+dnl learning flows (existing behavior preserved).
+check ovn-nbctl lsp-add ls0 p3
+check ovn-nbctl lsp-set-addresses p3 "fa:16:3e:00:00:03 10.0.0.3" unknown
+check ovn-nbctl --wait=sb sync
+
+ovn-sbctl dump-flows ls0 > ls0flows2
+AT_CAPTURE_FILE([ls0flows2])
+
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows2 | grep -q "p3"])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows2 | grep -q "p3"])
+
+dnl A port with port_security but WITHOUT "unknown" does NOT
+dnl get FDB learning flows.
+check ovn-nbctl lsp-add ls0 p4
+check ovn-nbctl set Logical_Switch_Port p4 \
+    'addresses=["fa:16:3e:00:00:04 10.0.0.4"]' \
+    'port_security=["fa:16:3e:00:00:04 10.0.0.4"]'
+check ovn-nbctl --wait=sb sync
+
+ovn-sbctl dump-flows ls0 > ls0flows3
+AT_CAPTURE_FILE([ls0flows3])
+
+AT_CHECK([grep -e "ls_in_lookup_fdb" ls0flows3 | grep -c "p4"], [1], [0
+])
+AT_CHECK([grep -e "ls_in_put_fdb" ls0flows3 | grep -c "p4"], [1], [0
 ])
 
 OVN_CLEANUP_NORTHD
@@ -7587,7 +7713,19 @@ AT_CHECK([grep -E "ls_in_l2_lkup.*S1-|unknown" S1flows | ovn_strip_lflows], [0],
 dnl Check that FDB learning is enabled for the switch port.
 AT_CHECK([grep -E "ls_.*fdb.*S1-" S1flows | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=100  , match=(inport == "S1-S2"), action=(reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-S2" && arp), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = lookup_fdb(inport, arp.sha); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-S2" && nd_na), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.tll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-S2" && nd_ns), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.sll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-S2" && arp.sha == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-S2" && nd.sll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-S2" && nd.tll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
   table=??(ls_in_put_fdb      ), priority=100  , match=(inport == "S1-S2" && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-S2" && arp && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, arp.sha); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-S2" && nd_na && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.tll); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-S2" && nd_ns && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.sll); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-S2" && arp.sha == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-S2" && nd.sll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-S2" && nd.tll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
 ])
 
 ovn-sbctl dump-flows S2 > S2flows
@@ -7604,7 +7742,19 @@ AT_CHECK([grep -E "ls_in_l2_lkup.*S2-|unknown" S2flows | ovn_strip_lflows], [0],
 dnl Check that FDB learning is enabled for the switch port.
 AT_CHECK([grep -E "ls_.*fdb.*S2-" S2flows | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=100  , match=(inport == "S2-S1"), action=(reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S2-S1" && arp), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = lookup_fdb(inport, arp.sha); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S2-S1" && nd_na), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.tll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S2-S1" && nd_ns), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.sll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S2-S1" && arp.sha == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S2-S1" && nd.sll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S2-S1" && nd.tll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
   table=??(ls_in_put_fdb      ), priority=100  , match=(inport == "S2-S1" && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S2-S1" && arp && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, arp.sha); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S2-S1" && nd_na && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.tll); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S2-S1" && nd_ns && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.sll); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S2-S1" && arp.sha == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S2-S1" && nd.sll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S2-S1" && nd.tll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
 ])
 
 dnl Add an explicit address to S1-S2 indicating that the port with
@@ -7625,7 +7775,19 @@ AT_CHECK([grep -E "ls_in_l2_lkup.*S1-|unknown" S1flows2 | ovn_strip_lflows], [0]
 dnl Check that FDB learning is still enabled for the switch port.
 AT_CHECK([grep -E "ls_.*fdb.*S1-" S1flows | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=100  , match=(inport == "S1-S2"), action=(reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-S2" && arp), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = lookup_fdb(inport, arp.sha); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-S2" && nd_na), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.tll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "S1-S2" && nd_ns), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.sll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-S2" && arp.sha == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-S2" && nd.sll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "S1-S2" && nd.tll == 00:00:00:00:00:00), action=(reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
   table=??(ls_in_put_fdb      ), priority=100  , match=(inport == "S1-S2" && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-S2" && arp && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, arp.sha); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-S2" && nd_na && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.tll); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "S1-S2" && nd_ns && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.sll); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-S2" && arp.sha == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-S2" && nd.sll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "S1-S2" && nd.tll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
 ])
 
 OVN_CLEANUP_NORTHD
@@ -9802,9 +9964,21 @@ AT_CHECK([ovn-nbctl --wait=sb lsp-set-options ln_port localnet_learn_fdb=true])
 AT_CHECK([ovn-sbctl dump-flows ls0 | grep -e 'ls_in_\(put\|lookup\)_fdb' | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_lookup_fdb   ), priority=100  , match=(inport == "ln_port"), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "ln_port" && arp), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = lookup_fdb(inport, arp.sha); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "ln_port" && nd_na), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.tll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "ln_port" && nd_ns), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.sll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "ln_port" && arp.sha == 00:00:00:00:00:00), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "ln_port" && nd.sll == 00:00:00:00:00:00), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "ln_port" && nd.tll == 00:00:00:00:00:00), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
   table=??(ls_in_lookup_fdb   ), priority=50   , match=(inport == "ln_port"), action=(flags.localnet = 1; next;)
   table=??(ls_in_put_fdb      ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_put_fdb      ), priority=100  , match=(inport == "ln_port" && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "ln_port" && arp && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, arp.sha); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "ln_port" && nd_na && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.tll); next;)
+  table=??(ls_in_put_fdb      ), priority=110  , match=(inport == "ln_port" && nd_ns && (reg0[[11]] == 0 || reg0[[22]] == 0)), action=(put_fdb(inport, eth.src); put_fdb(inport, nd.sll); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "ln_port" && arp.sha == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "ln_port" && nd.sll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
+  table=??(ls_in_put_fdb      ), priority=120  , match=(inport == "ln_port" && nd.tll == 00:00:00:00:00:00 && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
 ])
 
 # Disable 'localnet_learn_fdb' and check the flows
@@ -10225,6 +10399,12 @@ dnl priority 50 fallback.
 AT_CHECK([ovn-sbctl dump-flows ls1 | grep -e 'ls_in_lookup_fdb' | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_lookup_fdb   ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_lookup_fdb   ), priority=100  , match=(inport == "ln1"), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "ln1" && arp), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = lookup_fdb(inport, arp.sha); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "ln1" && nd_na), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.tll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=110  , match=(inport == "ln1" && nd_ns), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]]= lookup_fdb(inport, nd.sll); next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "ln1" && arp.sha == 00:00:00:00:00:00), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "ln1" && nd.sll == 00:00:00:00:00:00), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
+  table=??(ls_in_lookup_fdb   ), priority=120  , match=(inport == "ln1" && nd.tll == 00:00:00:00:00:00), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); reg0[[22]] = 1; next;)
   table=??(ls_in_lookup_fdb   ), priority=50   , match=(inport == "ln1"), action=(flags.localnet = 1; next;)
 ])
 
