@@ -229,6 +229,7 @@ dist-hook-git: distfiles
 	    grep -v '\.gitattributes$$' | \
 	    grep -v '\.gitmodules$$' | \
 	    grep -v "$(submodules)" | \
+	    grep -v dummy_file | \
 	    LC_ALL=C sort -u > all-gitfiles; \
 	  LC_ALL=C comm -1 -3 distfiles all-gitfiles > missing-distfiles; \
 	  if test -s missing-distfiles; then \
