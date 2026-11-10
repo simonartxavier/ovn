@@ -36,6 +36,7 @@ m4_define([M_DAEMONIZE],
 m4_define([M_START_TCPDUMP],
     [
      podman exec $1 tcpdump -l $2 >$3.tcpdump 2>$3.stderr &
+     m_tcpdump_pids="$m_tcpdump_pids $!"
      echo "podman exec $1 ps -ef | grep -v grep | grep tcpdump && podman exec $1 killall tcpdump" >> cleanup
      OVS_WAIT_UNTIL([grep -q "listening" $3.stderr])
     ]
@@ -46,6 +47,7 @@ m4_define([M_START_TCPDUMPS_RECURSIVE_], [
         names="$names $3"
         echo "Running podman exec $1 tcpdump -l $2 >$3.tcpdump 2>$3.stderr"
         podman exec $1 tcpdump -l $2 >$3.tcpdump 2>$3.stderr &
+        m_tcpdump_pids="$m_tcpdump_pids $!"
         echo "podman exec $1 ps -ef | grep -v grep | grep tcpdump && podman exec $1 killall tcpdump" >> cleanup
         M_START_TCPDUMPS_RECURSIVE_(m4_shift(m4_shift(m4_shift($@))))
         ])
@@ -596,6 +598,13 @@ m_kill() {
       podman exec $c ps -ef | grep -v grep | grep -q $command && \
         echo "Killing $command on $c" && podman exec $c killall $command
     done
+    # For tcpdump, wait for the host-side "podman exec ... &" relay processes
+    # to actually exit, so that their output files are fully written before
+    # the caller reads them.
+    if test "$command" = "tcpdump" && test -n "$m_tcpdump_pids"; then
+        wait $m_tcpdump_pids
+        m_tcpdump_pids=""
+    fi
 }
 
 m_is_fedora() {

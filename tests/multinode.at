@@ -3736,6 +3736,8 @@ stop_sending_background_packets() {
         m_as ovn-chassis-1 echo "Stopping ping on ovn-chassis-1" && killall ping
     m_as ovn-chassis-3 ps -ef | grep -v grep | grep -q ping && \
         m_as ovn-chassis-3 echo "Stopping ping on ovn-chassis-3" && killall ping
+    # Give some time for packets to get transmitted.
+    sleep 2
     stop_tcpdump
 }
 
@@ -3892,11 +3894,11 @@ final_check()
 
     # Wait a little more to get packets while network is restored
     sleep 2
+    stop_sending_background_packets
     echo "$(date +%H:%M:%S.%03N) Statistics after network restored (after $action)"
     new_lost=$(dump_statistics)
     echo "===> $((new_lost - lost)) packets lost during network restoration"
     AT_CHECK([test "$((new_lost - lost))" -le "$max_expected_loss_after_restoration"])
-    stop_sending_background_packets
 }
 
 check_garps()
