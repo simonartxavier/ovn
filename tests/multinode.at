@@ -2972,6 +2972,20 @@ CHECK_VRF()
 # Setup external FRR routers and OVN FRR routers with BGP unnumbered.
 m_setup_bgp_unnumbered_gws
 
+AS_BOX([After Setting up])
+m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf20 neighbors'
+AS_BOX([gw1])
+m_as ovn-gw-1 vtysh -c 'show bgp vrf ovnvrf10 neighbors'
+sleep 2
+AS_BOX([After 2 seconds])
+m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf20 neighbors'
+AS_BOX([gw1])
+m_as ovn-gw-1 vtysh -c 'show bgp vrf ovnvrf10 neighbors'
+sleep 15
+AS_BOX([After 15 seconds])
+m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf20 neighbors'
+AS_BOX([gw1])
+m_as ovn-gw-1 vtysh -c 'show bgp vrf ovnvrf10 neighbors'
 echo "Waiting for BGP sessions to establish..."
 OVS_WAIT_UNTIL([m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf20 neighbors' | grep -qE 'Connections established 1'])
 echo "BGP session established on gw-2"
